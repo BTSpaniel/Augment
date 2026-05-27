@@ -1,5 +1,5 @@
 <p align="center">
-  <img src="assets/augment-logo.svg" alt="Augment futuristic neon logo" width="820" />
+  <img src="assets/augment-logo.svg" alt="Augment futuristic neon logo" width="160" />
 </p>
 
 <p align="center">
