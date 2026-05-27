@@ -1,0 +1,438 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>Augment Lab</title>
+  <link rel="stylesheet" href="/ui/style.css" />
+</head>
+<body>
+  <div class="lab-shell">
+    <aside class="lab-nav lab-sidebar" aria-label="Workspace">
+      <!-- Brand row -->
+      <header class="lab-sidebar__brand">
+        <span class="lab-sidebar__logo" aria-hidden="true">⬡</span>
+        <span class="lab-sidebar__title">AUGMENT LAB</span>
+        <button class="lab-sidebar__collapse" type="button" title="Collapse sidebar" aria-label="Collapse sidebar">‹</button>
+      </header>
+
+      <!-- Primary actions -->
+      <div class="lab-sidebar__actions">
+        <button id="new-project-btn" class="lab-btn lab-btn--ghost lab-sidebar__action" type="button">+ New Project</button>
+        <button id="new-session-btn" class="lab-btn lab-btn--primary lab-sidebar__action" type="button">+ New Session</button>
+      </div>
+
+      <!-- Search -->
+      <div class="lab-sidebar__search">
+        <input id="session-search" class="lab-sidebar__search-input" placeholder="Search projects, folders, sessions…" />
+        <kbd class="lab-sidebar__kbd">⌘K</kbd>
+      </div>
+
+      <!-- Projects tree -->
+      <div class="lab-sidebar__projects" id="nav-sessions-block">
+        <div class="lab-sidebar__section-label">
+          <span>PROJECTS</span>
+          <span class="lab-pill" id="sessions-count">0</span>
+        </div>
+        <nav id="session-list" class="lab-session-list lab-projects" aria-label="Projects"></nav>
+      </div>
+
+      <!-- Secondary nav -->
+      <div class="lab-sidebar__divider"></div>
+      <nav class="lab-sidebar__secondary" aria-label="Workspace pages">
+        <button class="lab-nav__item" data-page="memory" type="button"><span class="lab-nav__icon">📚</span> Memory</button>
+        <button class="lab-nav__item" data-page="toolpacks" type="button"><span class="lab-nav__icon">🧰</span> Tool Packs</button>
+        <button class="lab-nav__item" data-page="skillpacks" type="button"><span class="lab-nav__icon">🧠</span> Skill Packs</button>
+        <button class="lab-nav__item" data-page="logs" type="button"><span class="lab-nav__icon">📜</span> Logs</button>
+        <button class="lab-nav__item" data-page="settings" type="button"><span class="lab-nav__icon">⚙️</span> Settings</button>
+      </nav>
+
+      <!-- Status card -->
+      <footer class="lab-sidebar__status">
+        <div class="lab-sidebar__status-row">
+          <span class="lab-sidebar__status-dot"></span>
+          <span id="system-status-text">Local · Ready</span>
+        </div>
+        <div class="lab-sidebar__status-model" id="model-indicator">—</div>
+      </footer>
+    </aside>
+
+    <header class="lab-topbar">
+      <div class="lab-topbar__left">
+        <strong class="lab-topbar__title" id="session-title">New chat</strong>
+        <span class="lab-chat__model" id="session-pill"></span>
+      </div>
+      <div class="lab-topbar__right">
+        <div class="lab-topbar__picker">
+          <span class="lab-topbar__label">Agent</span>
+          <div class="lab-topbar__agent-select" id="active-agent-select">
+            <span class="lab-agent-dot lab-agent-dot--idle" id="active-agent-dot"></span>
+            <span id="active-agent-name">Augment</span>
+            <span class="lab-topbar__chevron">▾</span>
+          </div>
+        </div>
+        <div class="lab-topbar__picker">
+          <span class="lab-topbar__label">Provider</span>
+          <select id="session-provider-select" class="lab-chat__select lab-topbar__select" aria-label="Active provider"></select>
+        </div>
+        <select id="session-model-select" class="lab-chat__select lab-topbar__select lab-topbar__select--model" aria-label="Active model"></select>
+        <button id="session-refresh-models-btn" class="lab-btn lab-btn--sm lab-topbar__icon-btn" type="button" title="Refresh model list from provider">↻</button>
+        <div class="lab-topbar__ready" title="Provider health">
+          <span class="lab-topbar__ready-dot"></span>
+          <span id="providers-health">Ready</span>
+        </div>
+        <button class="lab-btn lab-btn--sm lab-topbar__clear" id="clear-session-btn" type="button">Clear</button>
+      </div>
+    </header>
+
+    <main class="lab-main">
+      <section class="lab-page active" data-page="sessions" id="page-sessions">
+        <div class="lab-chat-column">
+          <!-- Scrolling stream: welcome card (when empty) + messages. -->
+          <div id="messages" class="lab-chat-stream" aria-live="polite">
+            <article id="chat-empty-state" class="lab-welcome-card">
+              <div class="lab-welcome-card__logo" aria-hidden="true">⬡</div>
+              <h2 class="lab-welcome-card__title">Welcome to Augment Lab</h2>
+              <p class="lab-welcome-card__blurb">Your AI workspace for deep thinking, building,<br/>and solving complex problems.</p>
+              <div class="lab-welcome-card__actions">
+                <button class="lab-welcome-card__btn" data-quick="new-session" type="button"><span>💬</span> New Session</button>
+                <button class="lab-welcome-card__btn" data-quick="upload" type="button"><span>📎</span> Upload File</button>
+                <button class="lab-welcome-card__btn" data-quick="tool" type="button"><span>🧩</span> Use a Tool</button>
+                <button class="lab-welcome-card__btn" data-quick="memory" type="button"><span>📚</span> Open Memory</button>
+              </div>
+            </article>
+          </div>
+
+          <!-- Composer -->
+          <form id="composer" class="lab-composer">
+            <div class="lab-compose-attachments" id="compose-attachments" hidden></div>
+            <div class="lab-composer__bubble">
+              <textarea id="input" rows="1" placeholder="Message Augment…"></textarea>
+              <div class="lab-composer__toolbar">
+                <button id="attach-image-btn" class="lab-composer__icon" type="button" title="Attach image (vision)">📎</button>
+                <input id="attach-image-input" type="file" accept="image/*" multiple hidden />
+                <button id="composer-provider-btn" class="lab-picker-pill" type="button" aria-haspopup="listbox" aria-expanded="false" title="Switch provider">
+                  <span class="lab-picker-pill__logo" data-pill-logo aria-hidden="true"></span>
+                  <span class="lab-picker-pill__label" data-pill-label>Provider</span>
+                  <span class="lab-picker-pill__chevron" aria-hidden="true">▾</span>
+                </button>
+                <button id="composer-model-btn" class="lab-picker-pill lab-picker-pill--model" type="button" aria-haspopup="listbox" aria-expanded="false" title="Switch model">
+                  <span class="lab-picker-pill__logo" data-pill-logo aria-hidden="true"></span>
+                  <span class="lab-picker-pill__label" data-pill-label>Model</span>
+                  <span class="lab-picker-pill__chevron" aria-hidden="true">▾</span>
+                </button>
+                <div id="composer-picker-popover" class="lab-picker-popover" role="listbox" hidden></div>
+                <span class="lab-composer__spacer"></span>
+                <button type="submit" class="lab-composer__send" aria-label="Send">↑</button>
+              </div>
+            </div>
+            <div class="lab-composer__hint">Enter to send · Shift+Enter for newline</div>
+          </form>
+
+          <!-- Diagnostics footer -->
+          <div class="lab-chat-footer">
+            <span class="lab-chat-footer__stat"><span class="lab-chat-footer__label">Context</span><strong id="status-context">0 / 0 chars</strong></span>
+            <span class="lab-chat-footer__stat"><span class="lab-chat-footer__label">Tools</span><strong id="status-tokens">0 calls</strong></span>
+            <span class="lab-chat-footer__stat"><span class="lab-chat-footer__label">Memory</span><strong>Session</strong></span>
+            <details class="lab-chat-footer__details">
+              <summary>Details ▾</summary>
+              <div class="lab-chat-footer__details-body">
+                <div><span class="lab-chat-footer__label">Session</span><strong id="status-session">—</strong></div>
+                <div><span class="lab-chat-footer__label">State</span><span class="lab-statusbar__dot" id="statusbar-dot"></span><strong id="statusbar-state">Idle</strong></div>
+              </div>
+            </details>
+          </div>
+        </div>
+      </section>
+
+      <section class="lab-page" data-page="memory" id="page-memory">
+        <header class="lab-page__header"><h2>Memory</h2><p>Facts the agent has captured across sessions.</p></header>
+        <div id="memory-list" class="lab-list"></div>
+      </section>
+
+      <section class="lab-page" data-page="toolpacks" id="page-toolpacks">
+        <header class="lab-page__header">
+          <div><h2>Tool Packs</h2><p>Tools grouped by their primary tag. READY = read-only, APPROVAL = mutates state.</p></div>
+        </header>
+        <div id="toolpacks-grid" class="lab-pack-grid"></div>
+      </section>
+
+      <section class="lab-page" data-page="skillpacks" id="page-skillpacks">
+        <header class="lab-page__header">
+          <div>
+            <h2>Skill Packs</h2>
+            <p>Reusable agent capabilities and adaptive learned behavior. Dormant packs activate when the task matches.</p>
+          </div>
+          <div class="lab-page__header-actions">
+            <button id="skillpacks-generate-btn" class="lab-btn lab-btn--primary" type="button">Generate Adaptive Skills</button>
+            <button id="skillpacks-refresh-btn" class="lab-btn" type="button">Refresh</button>
+          </div>
+        </header>
+        <div id="skillpacks-stats" class="lab-stat-grid"></div>
+        <section class="lab-pack-section">
+          <h3>Dormant Specialist Skill Packs</h3>
+          <p class="lab-pack-section__hint">Summoned only when the task needs the specialty.</p>
+          <div id="skillpacks-dormant" class="lab-pack-grid"></div>
+        </section>
+        <section class="lab-pack-section">
+          <h3>Adaptive Skill Packs</h3>
+          <p class="lab-pack-section__hint">Generated from current workspace, tools, memory, and session activity.</p>
+          <div id="skillpacks-adaptive" class="lab-pack-grid"></div>
+        </section>
+      </section>
+
+      <section class="lab-page" data-page="logs" id="page-logs">
+        <header class="lab-page__header"><h2>Logs</h2><p>Recent agent activity: status, tool runs, sessions.</p></header>
+        <ol id="logs-list" class="lab-logs"></ol>
+      </section>
+
+      <section class="lab-page" data-page="settings" id="page-settings">
+        <section class="lab-section">
+          <header class="lab-section__header">
+            <div>
+              <h2>Providers &amp; Keys</h2>
+              <p>Paste a key — endpoint, default model, and capabilities load automatically.</p>
+            </div>
+            <div class="lab-section__actions">
+              <button id="discover-btn" class="lab-btn" type="button" title="Re-scan env vars and FAIL data dir">↻ Discover</button>
+              <select id="add-provider-select" class="lab-input lab-input--compact">
+                <option value="">Add Provider…</option>
+              </select>
+              <button id="add-provider-btn" class="lab-btn lab-btn--primary" type="button">Add</button>
+            </div>
+          </header>
+          <div id="provider-cards" class="lab-provider-grid"></div>
+          <div id="removed-presets" class="lab-removed-presets"></div>
+        </section>
+
+        <section class="lab-section lab-codex" id="codex-card" hidden>
+          <header class="lab-section__header">
+            <div class="lab-codex__title">
+              <span class="lab-codex__dot" id="codex-dot">⚪</span>
+              <h2>ChatGPT / Codex</h2>
+              <span class="lab-codex__version" id="codex-version">not checked</span>
+            </div>
+          </header>
+          <p class="lab-codex__blurb">Use your ChatGPT Codex login for the local Codex bridge. This is not an API-key provider.</p>
+          <div class="lab-codex__state" id="codex-state">Codex runtime not detected.</div>
+          <div class="lab-codex__pending" id="codex-pending" hidden>
+            <div class="lab-codex__pending-row" id="codex-verification-row" hidden>Open <a id="codex-verification-link" target="_blank" rel="noopener noreferrer"></a></div>
+            <div class="lab-codex__pending-row" id="codex-user-code-row" hidden>Code: <strong id="codex-user-code"></strong></div>
+            <a class="lab-btn lab-btn--sm" id="codex-auth-link" target="_blank" rel="noopener noreferrer" hidden>Open Login</a>
+          </div>
+          <div class="lab-codex__actions">
+            <button class="lab-btn lab-btn--sm" id="codex-login-btn" type="button">Login with Code</button>
+            <button class="lab-btn lab-btn--sm" id="codex-refresh-btn" type="button">Refresh</button>
+            <button class="lab-btn lab-btn--sm lab-btn--danger" id="codex-cancel-btn" type="button" hidden>Cancel</button>
+          </div>
+        </section>
+
+        <section class="lab-section lab-thinking" id="thinking-card">
+          <header class="lab-section__header">
+            <div>
+              <h2>Background Thinking</h2>
+              <p>Periodic reflection loop. Runs the active provider with a small reflection prompt, no tools, no user-visible output. Saves notes to <code>data/mind/thinking_log.jsonl</code>.</p>
+            </div>
+            <div class="lab-section__actions">
+              <label class="lab-thinking__interval">
+                <span>Interval (s)</span>
+                <input id="thinking-interval-input" type="number" min="30" step="30" value="120" class="lab-input lab-input--compact" />
+              </label>
+              <button class="lab-btn lab-btn--primary" id="thinking-start-btn" type="button">▶ Start</button>
+              <button class="lab-btn lab-btn--danger" id="thinking-stop-btn" type="button" hidden>■ Stop</button>
+              <button class="lab-btn" id="thinking-refresh-btn" type="button">↻</button>
+            </div>
+          </header>
+          <div class="lab-thinking__status" id="thinking-status">Loading status…</div>
+          <div class="lab-thinking__log" id="thinking-log"><div class="lab-empty">No reflections yet.</div></div>
+        </section>
+
+        <section class="lab-section lab-agent">
+          <header class="lab-agent__head">
+            <div class="lab-agent__identity">
+              <span class="lab-agent__avatar" id="agent-avatar">A</span>
+              <div>
+                <h2 id="agent-display-name">Agent</h2>
+                <p id="agent-display-role">Single-loop coding assistant</p>
+              </div>
+              <span class="lab-agent__status" id="agent-display-status" data-status="idle">idle</span>
+            </div>
+            <div class="lab-agent__head-actions">
+              <button class="lab-btn lab-btn--primary" type="button" id="agent-save-btn">✓ Save Agent</button>
+              <button class="lab-btn" type="button" id="agent-reset-soul-btn">Reset Soul</button>
+            </div>
+          </header>
+
+          <nav class="lab-agent__tabs" role="tablist">
+            <button class="lab-agent__tab active" type="button" data-agent-tab="profile" role="tab">Profile</button>
+            <button class="lab-agent__tab" type="button" data-agent-tab="soul" role="tab">Soul</button>
+          </nav>
+
+          <form id="agent-form" class="lab-agent__panel lab-agent__panel--active" data-agent-panel="profile">
+            <h3 class="lab-agent__panel-title">Agent Profile</h3>
+            <div class="lab-agent__grid">
+              <label>
+                <span class="lab-agent__label-row"><strong>Agent Name</strong><span class="lab-agent__counter" id="agent-name-counter">0/50</span></span>
+                <input id="agent-name-input" maxlength="50" />
+              </label>
+              <label>
+                <span class="lab-agent__label-row"><strong>Role</strong><span class="lab-agent__counter" id="agent-role-counter">0/75</span></span>
+                <input id="agent-role-input" maxlength="75" />
+              </label>
+            </div>
+            <label class="lab-agent__full">
+              <span class="lab-agent__label-row"><strong>Description</strong><span class="lab-agent__counter" id="agent-description-counter">0/280</span></span>
+              <textarea id="agent-description-input" rows="3" maxlength="280" placeholder="One sentence on what this agent owns."></textarea>
+            </label>
+            <label class="lab-agent__full">
+              <span class="lab-agent__label-row"><strong>Persona / Voice</strong></span>
+              <textarea id="agent-persona-input" rows="3" placeholder="How does this agent talk?"></textarea>
+            </label>
+          </form>
+
+          <section class="lab-agent__panel" data-agent-panel="soul">
+            <header class="lab-agent__panel-head">
+              <div>
+                <h3 class="lab-agent__panel-title">Agent Soul Files</h3>
+                <p class="lab-agent__panel-hint">These Markdown files live under <code id="agent-soul-path">data/agent/soul</code> and shape only this agent's identity, personality, and remembered life history.</p>
+              </div>
+              <label class="lab-toggle">
+                <input type="checkbox" id="agent-soul-enabled" checked />
+                <span class="lab-toggle__slider"></span>
+                <span class="lab-toggle__label">Inject into prompts</span>
+              </label>
+            </header>
+            <div class="lab-soul-files">
+              <div class="lab-soul-file">
+                <span class="lab-soul-file__name">SOUL.md</span>
+                <textarea id="agent-soul-soul" rows="10" placeholder="# Agent Soul"></textarea>
+              </div>
+              <div class="lab-soul-file">
+                <span class="lab-soul-file__name">PERSONALITY.md</span>
+                <textarea id="agent-soul-personality" rows="10" placeholder="# Agent Personality"></textarea>
+              </div>
+              <div class="lab-soul-file">
+                <span class="lab-soul-file__name">HISTORY.md</span>
+                <textarea id="agent-soul-history" rows="10" placeholder="# Agent History"></textarea>
+              </div>
+            </div>
+            <form class="lab-soul-lesson" id="agent-soul-lesson-form">
+              <span class="lab-agent__label-row"><strong>Record a History Lesson</strong><span class="lab-agent__panel-hint">Appended as a timestamped bullet at the bottom of HISTORY.md.</span></span>
+              <textarea id="agent-soul-lesson-input" rows="2" placeholder="e.g. Preserve workspace state when refactoring across sessions."></textarea>
+              <div class="lab-agent__row-actions">
+                <button class="lab-btn lab-btn--sm lab-btn--primary" type="submit">Append Lesson</button>
+              </div>
+            </form>
+          </section>
+        </section>
+
+        <section class="lab-section">
+          <header class="lab-section__header">
+            <div>
+              <h2>About</h2>
+              <p>Augment Lab — single-loop coding assistant.</p>
+            </div>
+          </header>
+          <div class="lab-about" id="about-block">
+            <div><strong id="about-version">Augment Lab v1</strong></div>
+            <div>Provider profiles + safe tool registry + session-scoped memory.</div>
+          </div>
+        </section>
+      </section>
+    </main>
+
+    <aside class="lab-inspector" id="inspector-panel" aria-label="Inspector">
+      <div class="lab-inspector__tabs">
+        <button class="lab-inspector__tab active" data-tab="inspector" type="button">Inspector</button>
+        <button class="lab-inspector__tab" data-tab="tools" type="button">Tools</button>
+        <button class="lab-inspector__tab" data-tab="memory" type="button">Memory</button>
+        <button class="lab-inspector__tab" data-tab="logs" type="button">Logs</button>
+      </div>
+      <div class="lab-inspector__body">
+        <section class="lab-inspector__panel active" data-panel="inspector">
+          <div class="lab-insp-agent">
+            <div class="lab-insp-agent__avatar" id="insp-avatar">A</div>
+            <div class="lab-insp-agent__info">
+              <div class="lab-insp-agent__name" id="insp-name">Augment</div>
+              <div class="lab-insp-agent__role" id="insp-role">Single-loop coding assistant</div>
+            </div>
+            <span class="lab-status-tag" id="insp-status" data-status="idle">idle</span>
+          </div>
+          <section class="lab-insp-section">
+            <h4>Agent Profile</h4>
+            <div class="lab-insp-row"><span class="lab-insp-row__label">Agent</span><span class="lab-insp-row__value" id="insp-profile-name">Augment</span></div>
+            <div class="lab-insp-row"><span class="lab-insp-row__label">Model</span><span class="lab-insp-row__value" id="insp-model">—</span></div>
+            <div class="lab-insp-row"><span class="lab-insp-row__label">Provider</span><span class="lab-insp-row__value" id="insp-provider">—</span></div>
+            <div class="lab-insp-row"><span class="lab-insp-row__label">Role</span><span class="lab-insp-row__value" id="insp-role-row">—</span></div>
+            <div class="lab-insp-row"><span class="lab-insp-row__label">Status</span><span class="lab-insp-row__value" id="insp-status-row">idle</span></div>
+          </section>
+          <section class="lab-insp-section">
+            <h4>Capability Index</h4>
+            <div class="lab-insp-capability">
+              <div class="lab-insp-capability__metric">
+                <strong id="cap-tools">0</strong>
+                <small>Tools</small>
+              </div>
+              <div class="lab-insp-capability__metric">
+                <strong id="cap-success">100%</strong>
+                <small>Success</small>
+              </div>
+            </div>
+            <div class="lab-insp-capability__chips">
+              <span class="lab-insp-chip"><span class="lab-insp-chip__label">Runs</span><span id="cap-runs">0</span></span>
+              <span class="lab-insp-chip"><span class="lab-insp-chip__label">Sessions</span><span id="cap-sessions">0</span></span>
+              <span class="lab-insp-chip"><span class="lab-insp-chip__label">Resumed</span><span id="cap-resumed">0</span></span>
+            </div>
+          </section>
+          <section class="lab-insp-section">
+            <h4>Active Tools</h4>
+            <div id="insp-tools" class="lab-insp-tools-grid"></div>
+          </section>
+          <section class="lab-insp-section">
+            <h4>Session Mailbox</h4>
+            <form id="mailbox-form" class="lab-mailbox-form">
+              <textarea id="mailbox-input" rows="2" placeholder="Add session-scoped note"></textarea>
+              <button type="submit" class="lab-btn lab-btn--primary">Add</button>
+            </form>
+            <div id="mailbox-list" class="lab-mailbox-list"></div>
+          </section>
+          <section class="lab-insp-section">
+            <h4>Context</h4>
+            <div class="lab-insp-row"><span class="lab-insp-row__label">Original chars</span><span class="lab-insp-row__value" id="ctx-original">0</span></div>
+            <div class="lab-insp-row"><span class="lab-insp-row__label">Final chars</span><span class="lab-insp-row__value" id="ctx-final">0</span></div>
+            <div class="lab-insp-row"><span class="lab-insp-row__label">Truncated</span><span class="lab-insp-row__value" id="ctx-truncated">none</span></div>
+          </section>
+        </section>
+        <section class="lab-inspector__panel" data-panel="tools">
+          <div id="insp-tools-page" class="lab-list"></div>
+        </section>
+        <section class="lab-inspector__panel" data-panel="memory">
+          <div id="insp-memory" class="lab-list"></div>
+        </section>
+        <section class="lab-inspector__panel" data-panel="logs">
+          <ol id="insp-logs" class="lab-logs"></ol>
+        </section>
+      </div>
+    </aside>
+  </div>
+
+  <!-- Old bottom statusbar removed — its IDs (status-session, status-tokens,
+       status-context, statusbar-dot, statusbar-state) now live inside the
+       new in-chat diagnostics footer (see #page-sessions .lab-chat-footer). -->
+
+
+  <!--
+    Markdown + syntax highlighting libraries.
+    - marked.js: GFM-compatible markdown → HTML parser.
+    - highlight.js: language-agnostic code colourisation.
+    Loaded from jsDelivr. If you need offline operation or a paranoid
+    supply-chain stance, vendor these into `ui/vendor/` and rewrite the
+    src/href to relative paths; the rest of the rendering code works
+    either way.
+  -->
+  <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
+  <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css" />
+  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/common.min.js"></script>
+  <script src="/ui/app.js"></script>
+</body>
+</html>

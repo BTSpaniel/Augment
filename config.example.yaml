@@ -1,0 +1,21 @@
+server:
+  host: 127.0.0.1
+  port: 8787
+
+workspace_root: .
+data_dir: data
+
+provider:
+  id: default
+  name: OpenAI Compatible
+  endpoint: https://api.groq.com/openai/v1
+  api_key_env: AUGMENT_API_KEY
+  model: llama-3.1-8b-instant
+  timeout_seconds: 120
+
+loop:
+  max_iterations: 10
+  temperature: 0.2
+
+context:
+  total_budget_chars: 24000

@@ -1,0 +1,41 @@
+# Python bytecode and caches
+__pycache__/
+*.py[cod]
+*$py.class
+.pytest_cache/
+.mypy_cache/
+.ruff_cache/
+.coverage
+htmlcov/
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Local configuration and secrets
+config.yaml
+.env
+.env.*
+*.pem
+*.key
+
+# Runtime data: keep checked-in rule sheets only
+data/*
+!data/rules/
+!data/rules/**
+
+# Local evaluation/runtime folders
+.deepeval/
+
+# OS/editor noise
+.DS_Store
+Thumbs.db
+.vscode/
+.idea/
+
+# Build outputs
+build/
+dist/
+*.egg-info/
