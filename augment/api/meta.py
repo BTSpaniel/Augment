@@ -10,6 +10,7 @@ from fastapi import APIRouter, HTTPException, Request
 from pydantic import BaseModel
 
 from augment.config import ROOT
+from augment.logging import log_path, read_log_events, write_log_event
 from augment.security.path_guard import PathGuard
 
 
@@ -76,11 +77,36 @@ class AgentHistoryLessonBody(BaseModel):
     metadata: dict[str, Any] = {}
 
 
+class LogEventBody(BaseModel):
+    level: str = "info"
+    logger: str = "ui"
+    message: str = ""
+    source: str = "ui"
+    detail: dict[str, Any] = {}
+
+
 @router.get("/tools")
 async def tools(request: Request) -> dict[str, Any]:
     app = request.app.state.augment
     detailed = app.tools_detailed()
     return {"tools": app.tools.all_names(), "items": detailed}
+
+
+@router.get("/logs")
+async def logs(limit: int = 200, level: str = "") -> dict[str, Any]:
+    return {"events": read_log_events(limit=limit, level=level), "path": log_path()}
+
+
+@router.post("/logs")
+async def record_log(body: LogEventBody) -> dict[str, Any]:
+    event = write_log_event({
+        "level": body.level,
+        "logger": body.logger,
+        "message": body.message[:4000],
+        "source": body.source,
+        "detail": body.detail,
+    })
+    return {"ok": True, "event": event}
 
 
 @router.post("/files/reveal")

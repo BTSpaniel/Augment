@@ -191,8 +191,21 @@
       </section>
 
       <section class="lab-page" data-page="logs" id="page-logs">
-        <header class="lab-page__header"><h2>Logs</h2><p>Recent agent activity: status, tool runs, sessions.</p></header>
+        <header class="lab-page__header">
+          <div>
+            <h2>Logs</h2>
+            <p>Agent activity plus Augment's backend and browser console stream.</p>
+          </div>
+          <button id="logs-refresh-btn" class="lab-btn lab-btn--ghost" type="button">Refresh</button>
+        </header>
+        <section class="lab-section">
+          <header class="lab-section__header"><h2>Console</h2><p id="logs-path">Backend log path unavailable.</p></header>
+          <div id="console-list" class="lab-console"></div>
+        </section>
+        <section class="lab-section">
+          <header class="lab-section__header"><h2>Agent Activity</h2><p>Status, tool runs, sessions.</p></header>
         <ol id="logs-list" class="lab-logs"></ol>
+        </section>
       </section>
 
       <section class="lab-page" data-page="settings" id="page-settings">

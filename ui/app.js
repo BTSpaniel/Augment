@@ -71,6 +71,9 @@ const els = {
   codexRefreshBtn: qs('#codex-refresh-btn'),
   codexCancelBtn: qs('#codex-cancel-btn'),
   logsList: qs('#logs-list'),
+  logsRefreshBtn: qs('#logs-refresh-btn'),
+  consoleList: qs('#console-list'),
+  logsPath: qs('#logs-path'),
   providerCards: qs('#provider-cards'),
   addProviderSelect: qs('#add-provider-select'),
   addProviderBtn: qs('#add-provider-btn'),
@@ -136,6 +139,7 @@ const state = {
   activeStreams: new Map(),
   // Images attached to the *next* chat message. Each entry: { dataUrl, name }.
   pendingImages: [],
+  consoleEvents: [],
   // Whether the active provider advertises vision capability.
   visionEnabled: false,
   queueMode: localStorage.getItem('augment.queueMode') || 'ask',
@@ -148,10 +152,11 @@ const state = {
 };
 
 document.addEventListener('DOMContentLoaded', boot);
+installUiConsole();
 
 async function boot() {
   bindEvents();
-  await Promise.all([loadPresets(), loadProviders(), loadAgent(), loadMemory(), loadSessions()]);
+  await Promise.all([loadPresets(), loadProviders(), loadAgent(), loadMemory(), loadSessions(), loadLogs()]);
   if (state.sessionId) await openSession(state.sessionId, { force: true });
   setStatusbar('idle', 'Idle');
 }
@@ -221,6 +226,7 @@ function bindEvents() {
   els.thinkingStartBtn?.addEventListener('click', startThinking);
   els.thinkingStopBtn?.addEventListener('click', stopThinking);
   els.thinkingRefreshBtn?.addEventListener('click', loadThinking);
+  els.logsRefreshBtn?.addEventListener('click', loadLogs);
   bindSidebarContextMenu();
 }
 
@@ -258,6 +264,96 @@ async function request(path, options = {}) {
   const response = await fetch(path, options);
   if (!response.ok) throw new Error((await response.text()).slice(0, 800));
   return response.json();
+}
+
+function installUiConsole() {
+  if (installUiConsole.installed) return;
+  installUiConsole.installed = true;
+  const original = {
+    log: console.log.bind(console),
+    warn: console.warn.bind(console),
+    error: console.error.bind(console),
+  };
+  const wrap = (level) => (...args) => {
+    original[level](...args);
+    recordUiLog(level, args);
+  };
+  console.log = wrap('log');
+  console.warn = wrap('warn');
+  console.error = wrap('error');
+  window.addEventListener('error', (event) => {
+    recordUiLog('error', [event.message || 'window error'], {
+      filename: event.filename || '',
+      lineno: event.lineno || 0,
+      colno: event.colno || 0,
+    });
+  });
+  window.addEventListener('unhandledrejection', (event) => {
+    recordUiLog('error', ['unhandled rejection', event.reason]);
+  });
+}
+
+function serializeLogArg(value) {
+  if (value instanceof Error) return `${value.name}: ${value.message}`;
+  if (typeof value === 'string') return value;
+  try {
+    return JSON.stringify(value);
+  } catch {
+    return String(value);
+  }
+}
+
+function recordUiLog(level, args, detail = {}) {
+  const event = {
+    ts: Date.now() / 1000,
+    level,
+    logger: 'ui.console',
+    source: 'ui',
+    message: Array.from(args || []).map(serializeLogArg).join(' '),
+    detail,
+  };
+  state.consoleEvents.push(event);
+  if (state.consoleEvents.length > 250) state.consoleEvents.splice(0, state.consoleEvents.length - 250);
+  renderConsoleEvents();
+  if (level === 'error' || level === 'warn') {
+    fetch('/api/logs', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify(event),
+    }).catch(() => {});
+  }
+}
+
+async function loadLogs() {
+  if (!els.consoleList && !els.logsPath) return;
+  try {
+    const data = await request('/api/logs?limit=200');
+    const backend = Array.isArray(data.events) ? data.events : [];
+    const seen = new Set();
+    state.consoleEvents = backend.concat(state.consoleEvents).filter((event) => {
+      const key = `${event.ts || ''}|${event.level || ''}|${event.logger || ''}|${event.message || ''}`;
+      if (seen.has(key)) return false;
+      seen.add(key);
+      return true;
+    }).slice(-250);
+    if (els.logsPath) els.logsPath.textContent = data.path ? `Backend JSONL: ${data.path}` : 'Backend log path unavailable.';
+    renderConsoleEvents();
+  } catch (error) {
+    recordUiLog('warn', ['Could not load backend logs', error.message || error]);
+  }
+}
+
+function renderConsoleEvents() {
+  if (!els.consoleList) return;
+  const rows = state.consoleEvents.slice(-120).reverse();
+  els.consoleList.innerHTML = rows.map((event) => `
+    <div class="lab-console__row lab-console__row--${esc(event.level || 'info')}">
+      <time>${esc(formatTime(event.ts))}</time>
+      <span>${esc(event.level || 'info')}</span>
+      <strong>${esc(event.logger || event.source || 'augment')}</strong>
+      <code>${esc(event.message || '')}</code>
+    </div>
+  `).join('') || '<div class="lab-empty">No console events yet.</div>';
 }
 
 function augmentDialog({
@@ -2090,6 +2186,10 @@ function createStreamingBubble() {
   root.insertBefore(reasoning, artifacts);
 
   let reasoningEvents = 0;
+  let observedToolCalls = 0;
+  let observedToolResults = 0;
+  let backendToolCalls = 0;
+  let finalized = false;
   const reasoningBody = reasoning.querySelector('.lab-chat-reasoning__body');
   const reasoningCount = reasoning.querySelector('.lab-chat-reasoning__count');
 
@@ -2145,6 +2245,15 @@ function createStreamingBubble() {
     thinking,
     body,
     meta,
+    toolCallCount() {
+      return Math.max(observedToolCalls, observedToolResults, backendToolCalls);
+    },
+    observeToolCount(count) {
+      const parsed = Number(count || 0);
+      if (Number.isFinite(parsed) && parsed > 0) {
+        backendToolCalls = Math.max(backendToolCalls, parsed);
+      }
+    },
     setStatus,
     /**
      * Push a full thinking chunk into the live reasoning panel — the
@@ -2251,6 +2360,7 @@ function createStreamingBubble() {
       body.scrollTop = body.scrollHeight;
     },
     addToolCall(tool, args) {
+      observedToolCalls += 1;
       const argSummary = args ? esc(JSON.stringify(args).slice(0, 140)) : '';
       const argTag = argSummary ? ` <code class="lab-chat-artifact__args">${argSummary}</code>` : '';
       // A new tool call means whatever was streaming as "reasoning"
@@ -2260,6 +2370,7 @@ function createStreamingBubble() {
       return addArtifact(`<span class="lab-chat-artifact__kind lab-chat-artifact__kind--call">→ ${esc(tool)}</span>${argTag}<span class="lab-chat-artifact__status" data-status="running">…</span>`);
     },
     completeToolCall(tool, success, durationMs, errorText, receipt = null) {
+      observedToolResults += 1;
       const calls = artifacts.querySelectorAll('.lab-chat-artifact');
       let matched = null;
       for (let i = calls.length - 1; i >= 0; i--) {
@@ -2282,6 +2393,11 @@ function createStreamingBubble() {
       if (receipt) attachReceiptDiff(fresh, receipt);
     },
     finalize(content, data = {}) {
+      if (finalized) return;
+      finalized = true;
+      const scratchpadToolCalls = Array.isArray(data.scratchpad)
+        ? data.scratchpad.filter((step) => step && step.kind === 'action').length
+        : 0;
       thinking.hidden = true;
       body.hidden = false;
       // Cancel any pending streaming re-render — we're about to do the
@@ -2310,9 +2426,9 @@ function createStreamingBubble() {
       attachChatActions(root, body, { retry: true });
       const stopped = data.stopped_reason || 'done';
       const iter = data.iterations || 0;
-      const tools = data.tool_calls || 0;
+      const tools = Number(data.tool_calls || 0) || Math.max(observedToolCalls, observedToolResults, backendToolCalls, scratchpadToolCalls);
       meta.hidden = false;
-      meta.innerHTML = chatMetaHtml(stopped, iter, tools);
+      meta.innerHTML = chatMetaHtml(stopped, iter, tools, data.tool_count_sources || {});
       root.classList.remove('lab-chat-msg--streaming');
       // Collapse the reasoning panel on completion (kills the pulse) so
       // the final answer is the focal point — but leave it in the DOM
@@ -2411,6 +2527,22 @@ function handleChatEvent(bubble, type, data, requestSessionId) {
   // clobber the session the user is currently viewing.
   const stillActive = state.sessionId === (bubble.sessionId || requestSessionId);
 
+  if (type === 'step' && data?.kind) {
+    const mapped = {
+      thought: 'thinking',
+      token_delta: 'token_delta',
+      reasoning_delta: 'reasoning_delta',
+      action: 'tool_call',
+      observation: 'tool_result',
+      tool_plan: 'tool_plan',
+      final: 'token',
+      error: 'error',
+      bleep: 'bleep',
+    }[String(data.kind)] || '';
+    if (mapped) handleChatEvent(bubble, mapped, data, requestSessionId);
+    return;
+  }
+
   switch (type) {
     case 'started':
       // Server canonicalises empty/new session ids. Adopt the resolved id
@@ -2466,6 +2598,7 @@ function handleChatEvent(bubble, type, data, requestSessionId) {
     }
     case 'tool_plan': {
       const calls = Array.isArray(data.calls) ? data.calls : [];
+      bubble.observeToolCount?.(data.tool_calls);
       bubble.setStatus(`Planning · ${calls.length} parallel call${calls.length === 1 ? '' : 's'}`);
       for (const call of calls) {
         const toolName = String(call.tool || call.name || 'tool');
@@ -2475,11 +2608,13 @@ function handleChatEvent(bubble, type, data, requestSessionId) {
       break;
     }
     case 'tool_call':
+      bubble.observeToolCount?.(data.tool_calls);
       bubble.setStatus(`Using ${data.tool || 'tool'}…`);
       bubble.addToolCall(String(data.tool || 'tool'), data.args || {});
       bubble.addReasoningTool(String(data.tool || 'tool'), data.args || {});
       break;
     case 'tool_result':
+      bubble.observeToolCount?.(data.tool_calls);
       bubble.completeToolCall(
         String(data.tool || 'tool'),
         Boolean(data.success),
@@ -2497,18 +2632,34 @@ function handleChatEvent(bubble, type, data, requestSessionId) {
       bubble.setStatus(data.success ? `Got ${data.tool} result` : `${data.tool} failed`);
       break;
     case 'token':
-      bubble.finalize(String(data.content || ''));
+      if (typeof bubble.appendBodyDelta === 'function' && !String(bubble.body?._streamingBuffer || '').trim()) {
+        bubble.appendBodyDelta(String(data.content || ''));
+      }
       break;
-    case 'done':
+    case 'done': {
       bubble.finalize(String(data.content || ''), data);
+      // Update the sidebar preview to the assistant's reply so the session
+      // list reflects the last message rather than the user's prompt text.
+      const doneSessionId = bubble.sessionId || requestSessionId;
+      if (doneSessionId && data.content) {
+        upsertSidebarSession(doneSessionId, String(data.content || ''));
+      }
       // Status bars only follow the currently visible session.
       if (stillActive) {
         if (data.context_stats) {
           els.statusContext.textContent = `Context: ${data.context_stats.final_chars || 0} / ${data.context_stats.original_chars || 0} chars`;
         }
-        els.statusTokens.textContent = `Tools: ${data.tool_calls || 0} calls`;
+        const scratchpadTools = Array.isArray(data.scratchpad)
+          ? data.scratchpad.filter((step) => step && step.kind === 'action').length
+          : 0;
+        const tools = Number(data.tool_calls || 0) || Math.max(
+          typeof bubble.toolCallCount === 'function' ? bubble.toolCallCount() : 0,
+          scratchpadTools,
+        );
+        els.statusTokens.textContent = `Tools: ${tools} calls`;
       }
       break;
+    }
     case 'error':
       bubble.finalize(`Error: ${data.error || data.content || 'unknown'}`, { stopped_reason: 'error' });
       break;
@@ -2628,14 +2779,21 @@ async function loadMemory() {
 }
 
 /* ── Chat rendering ──────────────────────────────────────────────── */
-function chatMetaHtml(stopped, iterations, tools) {
+function chatMetaHtml(stopped, iterations, tools, sources = {}) {
   const status = String(stopped || 'done').replace(/_/g, ' ');
   const iter = Number(iterations || 0);
   const toolCount = Number(tools || 0);
+  const sourceTitle = [
+    `LLM turns: ${iter}`,
+    `verified tools: ${toolCount}`,
+    `done payload: ${Number(sources.result || sources.done || 0)}`,
+    `stream events: ${Number(sources.stream_events || 0)}`,
+    `scratchpad actions: ${Number(sources.scratchpad_actions || 0)}`,
+  ].join(' · ');
   return `
     <span class="lab-chat-meta-chip lab-chat-meta-chip--status">${esc(status)}</span>
-    <span class="lab-chat-meta-chip"><strong>${esc(String(iter))}</strong> iter</span>
-    <span class="lab-chat-meta-chip"><strong>${esc(String(toolCount))}</strong> tools</span>
+    <span class="lab-chat-meta-chip" title="LLM turns, not DOM events or streamed chunks"><strong>${esc(String(iter))}</strong> iter</span>
+    <span class="lab-chat-meta-chip" title="${esc(sourceTitle)}"><strong>${esc(String(toolCount))}</strong> tools</span>
   `;
 }
 
@@ -2672,7 +2830,7 @@ function addMessage(role, content, data = null, opts = {}) {
   if (data) {
     const meta = document.createElement('div');
     meta.className = 'lab-chat-msg__meta';
-    meta.innerHTML = chatMetaHtml(data.stopped_reason || 'done', data.iterations || 0, data.tool_calls || 0);
+    meta.innerHTML = chatMetaHtml(data.stopped_reason || 'done', data.iterations || 0, data.tool_calls || 0, data.tool_count_sources || {});
     el.appendChild(meta);
   }
   if (role === 'user') {

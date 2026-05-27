@@ -272,11 +272,17 @@ class ReActLoop:
         )
 
     def _system_text(self) -> str:
+        tool_guidance = (
+            "TOOL PREFERENCE: Use search_code for any grep/rg-style text search and "
+            "search_files to find files by name. "
+            "Do NOT run 'rg', 'grep', or 'find' via run_command — "
+            "search_code works even when rg is not installed (built-in Python fallback)."
+        )
         tool_plan = """When multiple independent reads/searches are useful, emit one JSON array in a <tool_plan> block, for example:
 <tool_plan>
 [{"tool":"list_dir","args":{"path":"."}}, {"tool":"search_files","args":{"query":"README"}}]
 </tool_plan>"""
-        return "\n\n".join(part for part in [self._system_prompt, tool_plan] if part.strip())
+        return "\n\n".join(part for part in [self._system_prompt, tool_guidance, tool_plan] if part.strip())
 
     def _extract_fallback_tool_calls(self, content: str) -> list[dict[str, Any]]:
         calls: list[dict[str, Any]] = []

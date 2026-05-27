@@ -1,9 +1,16 @@
 <p align="center">
-  <img src="assets/augment-logo.svg" alt="Augment futuristic neon logo" width="160" />
+  <img src="assets/augment-logo.svg" alt="Augment local AI workspace logo" width="160" />
 </p>
 
 <p align="center">
-  <strong>A local-first LLM workspace with streaming chat, ReAct tools, memory, context intelligence, and safety rails.</strong>
+  <strong>Local-first AI workbench for streaming chat, ReAct tools, memory, context budgeting, and guarded file edits.</strong>
+</p>
+
+<p align="center">
+  <img alt="Python 3.11+" src="https://img.shields.io/badge/Python-3.11%2B-3776AB?style=flat-square&logo=python&logoColor=white" />
+  <img alt="FastAPI" src="https://img.shields.io/badge/FastAPI-local%20server-009688?style=flat-square&logo=fastapi&logoColor=white" />
+  <img alt="Vanilla UI" src="https://img.shields.io/badge/UI-vanilla%20HTML%2FCSS%2FJS-f7df1e?style=flat-square&logo=javascript&logoColor=111111" />
+  <img alt="License MIT" src="https://img.shields.io/badge/License-MIT-111827?style=flat-square" />
 </p>
 
 <p align="center">
@@ -20,7 +27,7 @@
 
 # Augment
 
-Augment is a compact, local AI workbench for building, researching, editing, and thinking with LLMs. It keeps the useful parts of larger agent systems—provider routing, a ReAct loop, safe workspace tools, session memory, prompt budgeting, and a hosted chat UI—without forcing you into dashboards, work orders, agent swarms, or remote orchestration.
+Augment is a compact, local AI workbench for building, researching, editing, and thinking with LLMs. It keeps the useful parts of larger agent systems: provider routing, a ReAct loop, safe workspace tools, session memory, prompt budgeting, and a hosted chat UI, without forcing you into dashboards, work orders, agent swarms, or remote orchestration.
 
 It is designed for developers who want a fast local assistant that can inspect a workspace, use tools, stream responses live, remember useful context, and write files with guardrails.
 
@@ -31,7 +38,7 @@ It is designed for developers who want a fast local assistant that can inspect a
 - **OpenAI-compatible providers**: Works with Groq, OpenAI-compatible APIs, local servers, llama.cpp, vLLM, LM Studio-style endpoints, and similar providers.
 - **ReAct tool loop**: One assistant loop with structured tool calls, parallel read/search plans, and sequential mutations.
 - **Live streaming**: Token deltas, reasoning deltas, tool events, context stats, and final answers stream over SSE.
-- **Reload-safe streaming architecture**: Stream registry support is being wired so long-running chat tasks can survive browser reloads.
+- **Reload-aware streaming groundwork**: Active stream registry support gives long-running chat tasks a path toward browser reload recovery.
 - **Context intelligence**: Prompt sections are budgeted by model context window, placed into smart/dumb zones, and measured with token-aware diagnostics.
 - **Memory layers**: Session history, scratchboards, turn state, mailbox notes, user model hints, and persistent memory context.
 - **Coding discipline**: Project conventions, user rules, per-session coding contracts, edit receipts, and a hard style gate for generated code files.
@@ -119,6 +126,8 @@ Core Python dependencies are defined in `pyproject.toml`:
 - `pydantic`
 - `PyYAML`
 - `requests`
+- `urllib3`
+- `charset-normalizer`
 
 Optional feature extras:
 
@@ -158,6 +167,8 @@ loop:
 context:
   total_budget_chars: 24000
 ```
+
+The context budget setting is a conservative starter value. Runtime budgeting can scale from provider context-window metadata when the active model exposes it.
 
 ### Provider notes
 

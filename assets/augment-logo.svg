@@ -1,4 +1,6 @@
-<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="160" height="160">
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="160" height="160" role="img" aria-labelledby="augmentLogoTitle augmentLogoDesc">
+  <title id="augmentLogoTitle">Augment local AI workspace logo</title>
+  <desc id="augmentLogoDesc">A metallic letter A mark with cyan and magenta signal rails, workspace nodes, and a bright local assistant core.</desc>
   <defs>
     <filter id="neonCyan" x="-50%" y="-50%" width="200%" height="200%">
       <feGaussianBlur stdDeviation="4" result="tight" />
@@ -69,9 +71,23 @@
       </feMerge>
     </filter>
 
+    <radialGradient id="coreGlow" cx="50%" cy="48%" r="48%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.4" />
+      <stop offset="42%" stop-color="#00f3ff" stop-opacity="0.18" />
+      <stop offset="74%" stop-color="#ff00aa" stop-opacity="0.12" />
+      <stop offset="100%" stop-color="#ff00aa" stop-opacity="0" />
+    </radialGradient>
+
+    <linearGradient id="nodeGlass" x1="0%" y1="0%" x2="100%" y2="100%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.58" />
+      <stop offset="45%" stop-color="#00f3ff" stop-opacity="0.24" />
+      <stop offset="100%" stop-color="#ff00aa" stop-opacity="0.22" />
+    </linearGradient>
+
     <style>
       .electric-line { animation: pulse 2.6s ease-in-out infinite; }
       .spark { animation: twinkle 3.4s ease-in-out infinite; transform-origin: center; }
+      .signal-node { animation: nodePulse 4.2s ease-in-out infinite; transform-origin: center; }
       @keyframes pulse {
         0%, 100% { opacity: 0.76; stroke-width: 9; }
         50% { opacity: 1; stroke-width: 13; }
@@ -80,16 +96,23 @@
         0%, 100% { opacity: 0.28; transform: scale(0.75); }
         50% { opacity: 1; transform: scale(1.2); }
       }
+      @keyframes nodePulse {
+        0%, 100% { opacity: 0.58; transform: scale(0.96); }
+        50% { opacity: 0.92; transform: scale(1.04); }
+      }
     </style>
   </defs>
 
+  <!-- Halo and outer signal rails -->
   <g transform="translate(0, -15)">
+    <circle cx="500" cy="450" r="410" fill="url(#coreGlow)" opacity="0.88" />
     
     <polygon points="500,70 880,790 730,790 500,310 270,790 120,790" fill="#000000" opacity="0.5" filter="url(#neonCyan)" />
-    <polygon points="500,60 895,795 725,795 500,300 275,795 105,795" fill="none" stroke="url(#prismEdge)" stroke-width="5" opacity="0.55" filter="url(#hotBloom)" />
+    <polygon points="500,60 895,795 725,795 500,300 275,795 105,795" fill="none" stroke="url(#prismEdge)" stroke-width="9" opacity="0.72" filter="url(#hotBloom)" />
 
     <polygon points="500,70 880,790 730,790 500,310 270,790 120,790" fill="#0c0e14" stroke="#232a3a" stroke-width="2" />
 
+    <!-- Metallic body -->
     <polygon points="500,90 500,320 270,790 130,790" fill="url(#darkBase)" />
     <polygon points="480,130 420,250 240,610 165,765 245,765 415,435" fill="url(#metalLeft)" />
     <polygon points="415,435 245,765 220,765 390,435" fill="#59688c" opacity="0.35" />
@@ -98,6 +121,7 @@
     <polygon points="520,130 580,250 760,610 835,765 755,765 585,435" fill="url(#metalRight)" />
     <polygon points="585,435 755,765 780,765 610,435" fill="#191d26" opacity="0.75" />
 
+    <!-- Local assistant core -->
     <polygon points="500,320 660,640 340,640" fill="#020305" />
     <polygon points="500,345 635,615 365,615" fill="#06080c" />
 
@@ -107,6 +131,11 @@
     
     <rect x="375" y="614" width="90" height="7" rx="3" fill="#00f3ff" opacity="0.65" filter="url(#neonCyan)" />
     <rect x="535" y="614" width="90" height="7" rx="3" fill="#ff00aa" opacity="0.65" filter="url(#neonMagenta)" />
+
+    <g class="signal-node" filter="url(#hotBloom)">
+      <circle cx="500" cy="575" r="34" fill="url(#nodeGlass)" stroke="#ffffff" stroke-width="3" opacity="0.82" />
+      <path d="M 480,575 L 498,593 L 523,555" fill="none" stroke="#ffffff" stroke-width="9" stroke-linecap="round" stroke-linejoin="round" opacity="0.95" />
+    </g>
 
     <polygon points="230,510 295,420 315,490" fill="#151921" stroke="#293042" stroke-width="1.5" />
     <polygon points="230,510 200,560 275,540" fill="#323b50" />
@@ -118,11 +147,12 @@
     <line x1="440" y1="160" x2="475" y2="160" stroke="#00f3ff" stroke-width="3.5" stroke-linecap="round" filter="url(#neonCyan)" />
     <line x1="560" y1="160" x2="525" y2="160" stroke="#ff00aa" stroke-width="3.5" stroke-linecap="round" filter="url(#neonMagenta)" />
 
-    <path class="electric-line" d="M 485,105 L 248,555 L 143,765" fill="none" stroke="url(#cyanCore)" stroke-width="11" stroke-linecap="round" filter="url(#neonCyan)" />
+    <!-- Tool-loop rails -->
+    <path class="electric-line" d="M 485,105 L 248,555 L 143,765" fill="none" stroke="url(#cyanCore)" stroke-width="15" stroke-linecap="round" filter="url(#neonCyan)" />
     <path d="M 485,105 L 248,555 L 143,765" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.9" />
     <path d="M 468,150 L 307,455 L 178,718" fill="none" stroke="#8fffff" stroke-width="4" stroke-linecap="round" opacity="0.62" filter="url(#hotBloom)" />
 
-    <path class="electric-line" d="M 515,105 L 752,555 L 857,765" fill="none" stroke="url(#magentaCore)" stroke-width="11" stroke-linecap="round" filter="url(#neonMagenta)" />
+    <path class="electric-line" d="M 515,105 L 752,555 L 857,765" fill="none" stroke="url(#magentaCore)" stroke-width="15" stroke-linecap="round" filter="url(#neonMagenta)" />
     <path d="M 515,105 L 752,555 L 857,765" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.9" />
     <path d="M 532,150 L 693,455 L 822,718" fill="none" stroke="#ff8be8" stroke-width="4" stroke-linecap="round" opacity="0.62" filter="url(#hotBloom)" />
 
@@ -144,6 +174,7 @@
     <circle class="spark" cx="304" cy="690" r="3.5" fill="#ffffff" filter="url(#hotBloom)" />
     <circle class="spark" cx="696" cy="690" r="3.5" fill="#ffffff" filter="url(#hotBloom)" />
 
+    <!-- Workspace nodes -->
     <g fill="none" stroke="#00f3ff" stroke-width="3" stroke-linecap="round" filter="url(#neonCyan)">
       <path d="M 205,715 L 145,775 M 235,735 L 185,785" />
       <circle cx="145" cy="775" r="4.5" fill="#ffffff" />

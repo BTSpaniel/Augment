@@ -123,6 +123,7 @@ async def chat_stream(body: ChatRequest, request: Request) -> StreamingResponse:
                     yield _sse("tool_call", {
                         "tool": str(event.get("tool") or ""),
                         "args": event.get("args") or {},
+                        "tool_calls": int(event.get("tool_calls") or 0),
                     })
                 elif kind == "observation":
                     yield _sse("tool_result", {
@@ -131,21 +132,54 @@ async def chat_stream(body: ChatRequest, request: Request) -> StreamingResponse:
                         "output": str(event.get("output") or "")[:1500],
                         "error": str(event.get("error") or "")[:500],
                         "duration_ms": float(event.get("duration_ms") or 0.0),
+                        "tool_calls": int(event.get("tool_calls") or 0),
                     })
                 elif kind == "tool_plan":
-                    yield _sse("tool_plan", {"calls": list(event.get("calls") or [])})
+                    yield _sse("tool_plan", {
+                        "calls": list(event.get("calls") or []),
+                        "tool_calls": int(event.get("tool_calls") or 0),
+                    })
                 elif kind == "final":
                     # Loop signalled the final answer chunk — emit a single token
                     # event so the UI can switch from "thinking" to the answer
                     # immediately even before the chat() coroutine returns.
                     yield _sse("token", {"content": str(event.get("content") or "")})
+                    # "final" is the last callback the loop emits before
+                    # returning ReActResult. Break immediately so we don't
+                    # wait up to 15 s for the queue-get timeout before
+                    # we can emit the "done" event with real metadata.
+                    break
                 elif kind == "error":
                     yield _sse("error", {"content": str(event.get("content") or "")})
+                    # Same — loop returns after emitting the error callback.
+                    break
 
             # Drain any events that arrived after the loop exited so nothing is lost.
             while not queue.empty():
                 event = queue.get_nowait()
-                yield _sse("step", event)
+                kind = str(event.get("kind") or "")
+                if kind == "action":
+                    yield _sse("tool_call", {
+                        "tool": str(event.get("tool") or ""),
+                        "args": event.get("args") or {},
+                        "tool_calls": int(event.get("tool_calls") or 0),
+                    })
+                elif kind == "observation":
+                    yield _sse("tool_result", {
+                        "tool": str(event.get("tool") or ""),
+                        "success": bool(event.get("success")),
+                        "output": str(event.get("output") or "")[:1500],
+                        "error": str(event.get("error") or "")[:500],
+                        "duration_ms": float(event.get("duration_ms") or 0.0),
+                        "tool_calls": int(event.get("tool_calls") or 0),
+                    })
+                elif kind == "tool_plan":
+                    yield _sse("tool_plan", {
+                        "calls": list(event.get("calls") or []),
+                        "tool_calls": int(event.get("tool_calls") or 0),
+                    })
+                else:
+                    yield _sse("step", event)
 
             try:
                 result = await task
@@ -162,6 +196,7 @@ async def chat_stream(body: ChatRequest, request: Request) -> StreamingResponse:
                 "stopped_reason": result.stopped_reason,
                 "context_stats": result.context_stats,
                 "scratchpad": result.scratchpad,
+                "tool_count_sources": result.tool_count_sources,
             })
         finally:
             if not task.done():

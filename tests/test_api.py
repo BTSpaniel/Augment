@@ -21,6 +21,25 @@ def test_health_and_static_ui(tmp_path, monkeypatch):
         assert "read_file" in tools.json()["tools"]
 
 
+def test_logs_api_records_and_lists_console_events(tmp_path, monkeypatch):
+    monkeypatch.setenv("AUGMENT_DATA_DIR", str(tmp_path / "data"))
+    monkeypatch.setenv("AUGMENT_WORKSPACE_ROOT", str(tmp_path / "workspace"))
+    with TestClient(app) as client:
+        recorded = client.post("/api/logs", json={
+            "level": "warn",
+            "logger": "ui.console",
+            "message": "browser warning",
+            "source": "ui",
+            "detail": {"file": "app.js"},
+        })
+        assert recorded.status_code == 200
+        listing = client.get("/api/logs?limit=20")
+        assert listing.status_code == 200
+        payload = listing.json()
+        assert payload["path"]
+        assert any(event.get("message") == "browser warning" for event in payload["events"])
+
+
 def test_provider_settings_sessions_and_mailbox_api(tmp_path, monkeypatch):
     monkeypatch.setenv("AUGMENT_DATA_DIR", str(tmp_path / "data"))
     monkeypatch.setenv("AUGMENT_WORKSPACE_ROOT", str(tmp_path / "workspace"))
@@ -564,6 +583,7 @@ def test_chat_stream_emits_typed_sse_events(tmp_path, monkeypatch):
                 "kind": "action",
                 "tool": "read_file",
                 "args": {"path": "README.md"},
+                "tool_calls": 1,
             })
             await step_callback({
                 "kind": "observation",
@@ -573,6 +593,7 @@ def test_chat_stream_emits_typed_sse_events(tmp_path, monkeypatch):
                 "output": "# augment",
                 "error": "",
                 "duration_ms": 4.2,
+                "tool_calls": 1,
             })
             await step_callback({"kind": "final", "content": "Done."})
         return ChatResult(
@@ -584,6 +605,7 @@ def test_chat_stream_emits_typed_sse_events(tmp_path, monkeypatch):
             stopped_reason="final_answer",
             scratchpad=[],
             context_stats={"original_chars": 10, "final_chars": 10, "truncated": []},
+            tool_count_sources={"result": 1, "scratchpad_actions": 0, "stream_events": 1},
         )
 
     # Patch chat() and ensure the SSE endpoint thinks a provider is configured.
@@ -612,6 +634,14 @@ def test_chat_stream_emits_typed_sse_events(tmp_path, monkeypatch):
     assert "event: tool_result" in text
     assert "event: token" in text
     assert "event: done" in text
+    tool_call_match = re.search(r"event: tool_call\ndata: ({.*})", text)
+    tool_result_match = re.search(r"event: tool_result\ndata: ({.*})", text)
+    done_match = re.search(r"event: done\ndata: ({.*})", text)
+    assert tool_call_match and json.loads(tool_call_match.group(1))["tool_calls"] == 1
+    assert tool_result_match and json.loads(tool_result_match.group(1))["tool_calls"] == 1
+    assert done_match and json.loads(done_match.group(1))["tool_calls"] == 1
+    done_payload = json.loads(done_match.group(1))
+    assert done_payload.get("tool_count_sources", {}).get("result") == 1
 
 
 def test_codex_model_choice_parsing():

@@ -23,9 +23,19 @@ def _resolve_cwd(cwd: str, context: Dict[str, Any] | None) -> str:
     return str(path.resolve())
 
 
+_SEARCH_REDIRECT_CMDS = ("rg ", "grep ", "grep -", "find ", "fd ")
+
+
 def run_command(command: str, cwd: str = ".", timeout: int = _DEFAULT_TIMEOUT, _context: Dict[str, Any] | None = None) -> str:
     if not str(command or "").strip():
         return "Error: empty command"
+    cmd_stripped = str(command or "").strip()
+    if any(cmd_stripped.startswith(prefix) for prefix in _SEARCH_REDIRECT_CMDS):
+        return (
+            "Error: rg/grep/find is not available as a shell command here. "
+            "Use the 'search_code' tool for text/regex search (it has a built-in Python fallback) "
+            "or 'search_files' to find files by name. Do not retry with run_command."
+        )
     try:
         timeout = min(max(1, int(timeout or _DEFAULT_TIMEOUT)), 300)
     except Exception:

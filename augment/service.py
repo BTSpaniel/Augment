@@ -1,6 +1,6 @@
 from __future__ import annotations
 
-from dataclasses import dataclass
+from dataclasses import dataclass, field
 from typing import Any
 
 from augment.agent import AgentMonitor
@@ -53,6 +53,7 @@ class ChatResult:
     stopped_reason: str
     scratchpad: list[dict[str, Any]]
     context_stats: dict[str, object]
+    tool_count_sources: dict[str, int] = field(default_factory=dict)
 
 
 class AugmentApp:
@@ -216,14 +217,23 @@ class AugmentApp:
             temperature=self.config.loop.temperature,
         )
         loop_history = [{"role": item.role, "content": item.content} for item in history[:-1]]
+        emitted_tool_calls = 0
 
         async def _wrapped_callback(event: dict[str, Any]) -> None:
-            if isinstance(event, dict) and event.get("kind") == "observation":
-                self.agent.record_tool_run(
-                    str(event.get("tool") or "tool"),
-                    success=bool(event.get("success", True)),
-                    duration_ms=float(event.get("duration_ms") or 0.0),
-                )
+            nonlocal emitted_tool_calls
+            if isinstance(event, dict):
+                kind = str(event.get("kind") or "")
+                if kind == "tool_plan":
+                    emitted_tool_calls += len(list(event.get("calls") or []))
+                elif kind == "action":
+                    emitted_tool_calls += 1
+                event["tool_calls"] = emitted_tool_calls
+                if kind == "observation":
+                    self.agent.record_tool_run(
+                        str(event.get("tool") or "tool"),
+                        success=bool(event.get("success", True)),
+                        duration_ms=float(event.get("duration_ms") or 0.0),
+                    )
             if step_callback:
                 outcome = step_callback(event)
                 if hasattr(outcome, "__await__"):
@@ -270,18 +280,14 @@ class AugmentApp:
         except Exception:
             pass
         success_outcome = "final" in (result.stopped_reason or "").lower()
-        self.mind.on_event(
-            "task_success" if success_outcome else "idle",
-            f"{result.iterations} iter / {result.tool_calls} tools",
-        )
         # Consolidate this turn into the tiered memory: record an episode +
         # promote any high-priority working items. Cheap, file-local writes.
         try:
             scratchpad = result.scratchpad.to_list()
             tools_used = sorted({
-                str(step.get("tool") or "")
+                str(step.get("tool") or step.get("content") or "")
                 for step in scratchpad
-                if step.get("kind") == "action" and step.get("tool")
+                if step.get("kind") == "action" and (step.get("tool") or step.get("content"))
             })
             self.memory_system.consolidator.consolidate_session(
                 session_id=sid,
@@ -291,15 +297,29 @@ class AugmentApp:
             )
         except Exception:
             pass
+        scratchpad_items = result.scratchpad.to_list()
+        observed_tool_calls = len([step for step in scratchpad_items if step.get("kind") == "action"])
+        result_tool_calls = int(result.tool_calls or 0)
+        tool_call_count = max(result_tool_calls, observed_tool_calls, emitted_tool_calls)
+        tool_count_sources = {
+            "result": result_tool_calls,
+            "scratchpad_actions": observed_tool_calls,
+            "stream_events": int(emitted_tool_calls or 0),
+        }
+        self.mind.on_event(
+            "task_success" if success_outcome else "idle",
+            f"{result.iterations} iter / {tool_call_count} tools",
+        )
         return ChatResult(
             reply=result.content,
             session_id=sid,
             model=self.providers.default().model,
-            tool_calls=result.tool_calls,
+            tool_calls=tool_call_count,
             iterations=result.iterations,
             stopped_reason=result.stopped_reason,
-            scratchpad=result.scratchpad.to_list(),
+            scratchpad=scratchpad_items,
             context_stats=self.context.stats(),
+            tool_count_sources=tool_count_sources,
         )
 
     async def _reload_default_provider(self) -> None:
