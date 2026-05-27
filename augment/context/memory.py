@@ -43,6 +43,29 @@ class SessionStore:
             rows.append(ChatMessage(str(item.get("role") or "user"), str(item.get("content") or ""), float(item.get("ts") or 0)))
         return rows[-limit:]
 
+    def replace_history(self, session_id: str, messages: list[ChatMessage]) -> None:
+        path = self._path(session_id)
+        with path.open("w", encoding="utf-8") as handle:
+            for message in messages:
+                record = {"role": message.role, "content": message.content, "ts": message.ts or time.time()}
+                handle.write(json.dumps(record, ensure_ascii=False) + "\n")
+
+    def update_message(self, session_id: str, index: int, content: str) -> ChatMessage:
+        messages = self.history(session_id, limit=10000)
+        if index < 0 or index >= len(messages):
+            raise IndexError("message index out of range")
+        current = messages[index]
+        messages[index] = ChatMessage(current.role, str(content or ""), current.ts)
+        self.replace_history(session_id, messages)
+        return messages[index]
+
+    def delete_message(self, session_id: str, index: int) -> None:
+        messages = self.history(session_id, limit=10000)
+        if index < 0 or index >= len(messages):
+            raise IndexError("message index out of range")
+        del messages[index]
+        self.replace_history(session_id, messages)
+
     # ── Project metadata (sidecar) ─────────────────────────────────
     def meta(self, session_id: str) -> dict[str, Any]:
         path = self._meta_path(session_id)

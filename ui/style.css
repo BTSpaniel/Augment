@@ -77,7 +77,6 @@ kbd,
 .lab-welcome-card__title,
 .lab-welcome-card__actions,
 .lab-chat-footer,
-.lab-chat-actions,
 .lab-chat-thinking,
 .lab-chat-artifacts,
 .lab-chat-msg__meta,
@@ -1883,6 +1882,27 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
   text-transform: uppercase;
 }
 .lab-sidebar__section-label > span:first-child { flex: 1; }
+.lab-sidebar__section-action {
+  width: 22px;
+  height: 22px;
+  display: inline-flex;
+  align-items: center;
+  justify-content: center;
+  border: 1px solid rgba(148,163,184,0.18);
+  border-radius: 999px;
+  color: var(--fg-2);
+  background: rgba(255,255,255,0.035);
+  cursor: pointer;
+  font-size: 0.92rem;
+  line-height: 1;
+}
+.lab-sidebar__section-action:hover,
+.lab-sidebar__section-action:focus-visible {
+  color: #e0f2fe;
+  border-color: rgba(125,211,252,0.42);
+  background: rgba(14,165,233,0.14);
+  outline: none;
+}
 
 /* Projects tree (scrolling region) */
 .lab-sidebar__projects {
@@ -2893,59 +2913,6 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
 }
 .lab-chat-msg:not(.lab-chat-msg--streaming) .lab-stream-cursor { display: none; }
 
-/* Action bar (Copy / Retry / Delete) under finalized assistant messages */
-.lab-chat-actions {
-  display: flex;
-  flex-wrap: wrap;
-  gap: 8px;
-  margin-top: 12px;
-  opacity: 1;
-  transition: opacity 160ms ease, transform 160ms ease;
-}
-.lab-chat-msg:hover .lab-chat-actions,
-.lab-chat-actions:focus-within { opacity: 1; }
-.lab-chat-actions__btn {
-  background:
-    linear-gradient(180deg, rgba(255,255,255,0.10), rgba(255,255,255,0.035)),
-    rgba(15,23,42,0.74);
-  border: 1px solid rgba(148,163,184,0.28);
-  color: #e2e8f0;
-  font-size: 0.76rem;
-  font-weight: 600;
-  padding: 7px 11px;
-  border-radius: 999px;
-  cursor: pointer;
-  line-height: 1.1;
-  min-height: 30px;
-  box-shadow:
-    0 8px 20px rgba(0,0,0,0.16),
-    inset 0 1px 0 rgba(255,255,255,0.065);
-  transition: background 120ms ease, color 120ms ease, border-color 120ms ease, transform 120ms ease, box-shadow 120ms ease;
-}
-.lab-chat-actions__btn:hover {
-  background:
-    linear-gradient(180deg, rgba(14,165,233,0.20), rgba(14,165,233,0.08));
-  color: #f8fafc;
-  border-color: rgba(125,211,252,0.36);
-  box-shadow: 0 0 18px rgba(14,165,233,0.13), inset 0 1px 0 rgba(255,255,255,0.06);
-  transform: translateY(-1px);
-}
-.lab-chat-actions__btn:focus-visible {
-  outline: 2px solid rgba(125,211,252,0.72);
-  outline-offset: 2px;
-}
-.lab-chat-actions__btn--danger {
-  border-color: rgba(248,113,113,0.26);
-  color: #fecaca;
-}
-.lab-chat-actions__btn--danger:hover {
-  background:
-    linear-gradient(180deg, rgba(239,68,68,0.20), rgba(239,68,68,0.08));
-  color: #fecaca;
-  border-color: rgba(252,165,165,0.42);
-  box-shadow: 0 0 18px rgba(239,68,68,0.12), inset 0 1px 0 rgba(255,255,255,0.06);
-}
-
 /* ── Live reasoning panel (Luna/Blackboard-style streaming feel) ── */
 .lab-chat-reasoning {
   margin: 6px 0 8px;
@@ -3071,4 +3038,162 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
 }
 @keyframes labReasoningCaret {
   to { opacity: 0; }
+}
+
+/* Session drag/drop organization */
+.lab-session-item[draggable="true"] {
+  cursor: grab;
+}
+.lab-session-item.is-dragging {
+  opacity: 0.38;
+  cursor: grabbing;
+  transform: scale(0.985);
+}
+.lab-session-group.is-drop-over {
+  border-color: rgba(125,211,252,0.42);
+}
+.lab-session-group.is-drop-over .lab-session-group__head,
+.lab-session-group.is-drop-over .lab-session-group__items {
+  background:
+    linear-gradient(135deg, rgba(14,165,233,0.16), rgba(99,102,241,0.08)),
+    rgba(14,165,233,0.05);
+  outline: 1px dashed rgba(125,211,252,0.55);
+  outline-offset: -2px;
+}
+
+/* Custom dialog primitive */
+.lab-dialog-overlay {
+  position: fixed;
+  inset: 0;
+  z-index: 240;
+  display: flex;
+  align-items: center;
+  justify-content: center;
+  padding: 18px;
+  background:
+    radial-gradient(circle at 50% 15%, rgba(14,165,233,0.14), transparent 34rem),
+    rgba(2,6,23,0.68);
+  backdrop-filter: blur(8px);
+  -webkit-backdrop-filter: blur(8px);
+  opacity: 0;
+  pointer-events: none;
+  transition: opacity 160ms ease;
+}
+.lab-dialog-overlay--open {
+  opacity: 1;
+  pointer-events: auto;
+}
+.lab-dialog {
+  width: min(520px, calc(100vw - 28px));
+  max-height: min(86vh, 720px);
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  border: 1px solid rgba(148,163,184,0.20);
+  border-radius: 18px;
+  background: linear-gradient(180deg, rgba(18,24,32,0.98), rgba(8,12,18,0.98));
+  box-shadow: 0 28px 90px rgba(0,0,0,0.44), inset 0 1px 0 rgba(255,255,255,0.06);
+  transform: translateY(10px) scale(0.985);
+  transition: transform 160ms ease;
+}
+.lab-dialog-overlay--open .lab-dialog {
+  transform: translateY(0) scale(1);
+}
+.lab-dialog--shake {
+  animation: labDialogShake 240ms ease;
+}
+@keyframes labDialogShake {
+  0%, 100% { transform: translateX(0); }
+  25% { transform: translateX(-6px); }
+  75% { transform: translateX(6px); }
+}
+.lab-dialog__head,
+.lab-dialog__foot {
+  display: flex;
+  align-items: center;
+  gap: 10px;
+  padding: 14px 16px;
+  border-color: rgba(148,163,184,0.14);
+}
+.lab-dialog__head {
+  border-bottom: 1px solid rgba(148,163,184,0.14);
+  background: linear-gradient(180deg, rgba(255,255,255,0.045), transparent);
+}
+.lab-dialog__head h2 {
+  flex: 1;
+  margin: 0;
+  color: var(--fg-0);
+  font-size: 1rem;
+  font-weight: 700;
+}
+.lab-dialog__close {
+  width: 30px;
+  height: 30px;
+  border: 0;
+  border-radius: 10px;
+  color: var(--fg-2);
+  background: transparent;
+  cursor: pointer;
+  font-size: 1.05rem;
+}
+.lab-dialog__close:hover {
+  color: var(--fg-0);
+  background: rgba(255,255,255,0.06);
+}
+.lab-dialog__body {
+  padding: 16px;
+  overflow: auto;
+}
+.lab-dialog__body p {
+  margin: 0 0 12px;
+  color: var(--fg-2);
+  line-height: 1.5;
+}
+.lab-dialog__input {
+  width: 100%;
+  border: 1px solid rgba(148,163,184,0.22);
+  border-radius: 12px;
+  padding: 10px 12px;
+  color: var(--fg-0);
+  background: rgba(2,6,23,0.58);
+  outline: none;
+  font: inherit;
+}
+textarea.lab-dialog__input {
+  min-height: 160px;
+  resize: vertical;
+  line-height: 1.5;
+}
+.lab-dialog__input:focus {
+  border-color: rgba(125,211,252,0.55);
+  box-shadow: 0 0 0 3px rgba(14,165,233,0.14);
+}
+.lab-dialog__foot {
+  justify-content: flex-end;
+  border-top: 1px solid rgba(148,163,184,0.14);
+  background: rgba(2,6,23,0.38);
+}
+.lab-dialog__btn {
+  border: 1px solid rgba(148,163,184,0.22);
+  border-radius: 999px;
+  padding: 8px 14px;
+  color: var(--fg-1);
+  background: rgba(255,255,255,0.045);
+  cursor: pointer;
+  font-weight: 600;
+}
+.lab-dialog__btn:hover {
+  color: var(--fg-0);
+  border-color: rgba(125,211,252,0.36);
+  background: rgba(14,165,233,0.12);
+}
+.lab-dialog__btn--primary {
+  color: #e0f2fe;
+  border-color: rgba(14,165,233,0.42);
+  background: linear-gradient(180deg, rgba(14,165,233,0.24), rgba(14,165,233,0.10));
+}
+.lab-dialog__btn--danger {
+  color: #fee2e2;
+  border-color: rgba(248,113,113,0.42);
+  background: linear-gradient(180deg, rgba(239,68,68,0.24), rgba(239,68,68,0.10));
 }

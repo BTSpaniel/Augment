@@ -353,6 +353,10 @@ class SessionTitleBody(BaseModel):
     title: str
 
 
+class SessionMessageBody(BaseModel):
+    content: str = ""
+
+
 @router.put("/sessions/{session_id}/project")
 async def set_session_project(session_id: str, body: SessionProjectBody, request: Request) -> dict[str, Any]:
     return {
@@ -475,6 +479,26 @@ async def session_history(session_id: str, request: Request, limit: int = 200) -
 async def clear_session_history(session_id: str, request: Request) -> dict[str, Any]:
     request.app.state.augment.sessions.clear(session_id)
     return {"ok": True, "session_id": session_id}
+
+
+@router.put("/sessions/{session_id}/history/{index}")
+async def update_session_message(session_id: str, index: int, body: SessionMessageBody, request: Request) -> dict[str, Any]:
+    if not body.content.strip():
+        raise HTTPException(400, "content is required")
+    try:
+        message = request.app.state.augment.sessions.update_message(session_id, index, body.content)
+    except IndexError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return {"ok": True, "session_id": session_id, "index": index, "message": message.__dict__}
+
+
+@router.delete("/sessions/{session_id}/history/{index}")
+async def delete_session_message(session_id: str, index: int, request: Request) -> dict[str, Any]:
+    try:
+        request.app.state.augment.sessions.delete_message(session_id, index)
+    except IndexError as exc:
+        raise HTTPException(404, str(exc)) from exc
+    return {"ok": True, "session_id": session_id, "index": index}
 
 
 @router.delete("/sessions/{session_id}")

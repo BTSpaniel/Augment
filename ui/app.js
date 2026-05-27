@@ -99,6 +99,8 @@ const els = {
   agentSoulLessonInput: qs('#agent-soul-lesson-input'),
   newSessionBtn: qs('#new-session-btn'),
   newProjectBtn: qs('#new-project-btn'),
+  projectsNewFolderBtn: qs('#projects-new-folder-btn'),
+  navSessionsBlock: qs('#nav-sessions-block'),
   sidebarCollapseBtn: qs('.lab-sidebar__collapse'),
   sidebar: qs('.lab-sidebar'),
   welcomeQuickButtons: qsa('.lab-welcome-card__btn[data-quick]'),
@@ -140,6 +142,8 @@ const state = {
   queuedMessages: [],
   queuePaused: false,
   activeAbort: null,
+  dragSessionId: '',
+  justDroppedSession: false,
   projectFolders: new Set(JSON.parse(localStorage.getItem('augment.projectFolders') || '[]')),
 };
 
@@ -155,6 +159,7 @@ async function boot() {
 function bindEvents() {
   els.newSessionBtn.addEventListener('click', startNewSession);
   els.newProjectBtn?.addEventListener('click', startNewProject);
+  els.projectsNewFolderBtn?.addEventListener('click', createProjectFolder);
   els.sidebarCollapseBtn?.addEventListener('click', toggleSidebar);
   els.welcomeQuickButtons.forEach((btn) =>
     btn.addEventListener('click', () => handleQuickAction(btn.dataset.quick)),
@@ -253,6 +258,80 @@ async function request(path, options = {}) {
   const response = await fetch(path, options);
   if (!response.ok) throw new Error((await response.text()).slice(0, 800));
   return response.json();
+}
+
+function augmentDialog({
+  title = 'Confirm',
+  message = '',
+  value = '',
+  multiline = false,
+  confirmLabel = 'OK',
+  cancelLabel = 'Cancel',
+  danger = false,
+  required = false,
+} = {}) {
+  return new Promise((resolve) => {
+    const overlay = document.createElement('div');
+    overlay.className = 'lab-dialog-overlay';
+    overlay.tabIndex = -1;
+    const fieldHtml = multiline
+      ? `<textarea class="lab-dialog__input" rows="8">${esc(value)}</textarea>`
+      : value !== null
+        ? `<input class="lab-dialog__input" type="text" value="${esc(value)}" />`
+        : '';
+    overlay.innerHTML = `
+      <section class="lab-dialog" role="dialog" aria-modal="true" aria-labelledby="lab-dialog-title">
+        <header class="lab-dialog__head">
+          <h2 id="lab-dialog-title">${esc(title)}</h2>
+          <button class="lab-dialog__close" type="button" data-dialog-cancel aria-label="Close">×</button>
+        </header>
+        <div class="lab-dialog__body">
+          ${message ? `<p>${esc(message)}</p>` : ''}
+          ${fieldHtml}
+        </div>
+        <footer class="lab-dialog__foot">
+          <button class="lab-dialog__btn" type="button" data-dialog-cancel>${esc(cancelLabel)}</button>
+          <button class="lab-dialog__btn lab-dialog__btn--primary ${danger ? 'lab-dialog__btn--danger' : ''}" type="button" data-dialog-confirm>${esc(confirmLabel)}</button>
+        </footer>
+      </section>
+    `;
+    document.body.appendChild(overlay);
+    const input = overlay.querySelector('.lab-dialog__input');
+    const close = (confirmed) => {
+      const next = input ? input.value : '';
+      if (confirmed && required && input && !next.trim()) {
+        input.focus();
+        overlay.querySelector('.lab-dialog')?.classList.add('lab-dialog--shake');
+        setTimeout(() => overlay.querySelector('.lab-dialog')?.classList.remove('lab-dialog--shake'), 260);
+        return;
+      }
+      overlay.remove();
+      resolve({ confirmed, value: next });
+    };
+    overlay.addEventListener('click', (event) => {
+      if (event.target === overlay || event.target.closest('[data-dialog-cancel]')) close(false);
+      if (event.target.closest('[data-dialog-confirm]')) close(true);
+    });
+    overlay.addEventListener('keydown', (event) => {
+      if (event.key === 'Escape') close(false);
+      if (event.key === 'Enter' && !multiline && (event.ctrlKey || event.metaKey || event.target === input)) close(true);
+    });
+    requestAnimationFrame(() => {
+      overlay.classList.add('lab-dialog-overlay--open');
+      (input || overlay).focus();
+      input?.select?.();
+    });
+  });
+}
+
+async function appPrompt(title, value = '', options = {}) {
+  const result = await augmentDialog({ title, value, required: true, ...options });
+  return result.confirmed ? String(result.value || '').trim() : null;
+}
+
+async function appConfirm(title, message = '', options = {}) {
+  const result = await augmentDialog({ title, message, value: null, confirmLabel: 'Confirm', ...options });
+  return result.confirmed;
 }
 
 /* ── Presets ──────────────────────────────────────────────────────── */
@@ -842,7 +921,7 @@ async function refreshProfileModels(profileId, card) {
 }
 
 async function removeProfile(profileId) {
-  if (!confirm(`Remove provider “${profileId}”?`)) return;
+  if (!await appConfirm('Remove provider?', `Remove provider “${profileId}”?`, { confirmLabel: 'Remove', danger: true })) return;
   try {
     await request(`/api/providers/${encodeURIComponent(profileId)}`, { method: 'DELETE' });
     await loadProviders();
@@ -1056,7 +1135,7 @@ async function toggleAgentSoulEnabled() {
 }
 
 async function resetAgentSoul() {
-  if (!confirm('Reset SOUL.md / PERSONALITY.md / HISTORY.md to defaults? Your edits will be overwritten.')) return;
+  if (!await appConfirm('Reset agent soul?', 'Reset SOUL.md / PERSONALITY.md / HISTORY.md to defaults? Your edits will be overwritten.', { confirmLabel: 'Reset', danger: true })) return;
   try {
     const data = await request('/api/agent/soul/reset', { method: 'POST' });
     renderAgentSoul(data);
@@ -1134,26 +1213,29 @@ function renderSessions() {
     const sessionsHtml = isEmptyFolder
       ? '<div class="lab-session-group__empty">Empty folder · use ⋯ to add a chat</div>'
       : items.map((s) => `
-      <button class="lab-session-item ${s.session_id === state.sessionId ? 'active' : ''}" data-session="${esc(s.session_id)}" type="button">
+      <button class="lab-session-item ${s.session_id === state.sessionId ? 'active' : ''}" data-session="${esc(s.session_id)}" data-project="${esc(project)}" draggable="true" type="button">
         <span class="lab-session-item__name">${esc(s.title || 'New chat')}</span>
         <span class="lab-session-item__meta">${esc(s.last_preview || `${s.message_count || 0} messages`)}</span>
       </button>
     `).join('');
     return `
-      <section class="lab-session-group ${collapsed ? 'is-collapsed' : ''}" data-group="${esc(label)}" data-project="${esc(project)}">
-        <header class="lab-session-group__head" data-toggle-group="${esc(label)}" data-project="${esc(project)}">
+      <section class="lab-session-group ${collapsed ? 'is-collapsed' : ''}" data-group="${esc(label)}" data-project="${esc(project)}" data-drop-zone="project">
+        <header class="lab-session-group__head" data-toggle-group="${esc(label)}" data-project="${esc(project)}" data-drop-zone="project">
           <span class="lab-session-group__chevron" aria-hidden="true">▾</span>
           <span class="lab-session-group__title">${esc(label)}</span>
           <span class="lab-session-group__count">${items.length}</span>
           <button class="lab-session-group__menu" data-project-menu="${esc(project)}" type="button" title="Folder actions" aria-label="Folder actions">⋯</button>
         </header>
-        <div class="lab-session-group__items">${sessionsHtml}</div>
+        <div class="lab-session-group__items" data-project="${esc(project)}" data-drop-zone="project">${sessionsHtml}</div>
       </section>
     `;
   }).join('');
 
   qsa('.lab-session-item', els.sessionList).forEach((item) =>
-    item.addEventListener('click', () => openSession(item.dataset.session)),
+    item.addEventListener('click', () => {
+      if (state.justDroppedSession) return;
+      openSession(item.dataset.session);
+    }),
   );
   qsa('.lab-session-group__grill', els.sessionList).forEach((btn) =>
     btn.addEventListener('click', (event) => {
@@ -1182,6 +1264,57 @@ function renderSessions() {
       head.parentElement.classList.toggle('is-collapsed');
     }),
   );
+  bindSessionDragAndDrop();
+}
+
+function bindSessionDragAndDrop() {
+  qsa('.lab-session-item', els.sessionList).forEach((item) => {
+    item.addEventListener('dragstart', (event) => {
+      state.dragSessionId = item.dataset.session || '';
+      event.dataTransfer.effectAllowed = 'move';
+      event.dataTransfer.setData('text/plain', state.dragSessionId);
+      item.classList.add('is-dragging');
+    });
+    item.addEventListener('dragend', () => {
+      state.dragSessionId = '';
+      qsa('.is-dragging, .is-drop-over', els.sessionList).forEach((el) => el.classList.remove('is-dragging', 'is-drop-over'));
+    });
+  });
+  qsa('[data-drop-zone="project"]', els.sessionList).forEach((zone) => {
+    zone.addEventListener('dragover', (event) => {
+      if (!state.dragSessionId) return;
+      event.preventDefault();
+      event.dataTransfer.dropEffect = 'move';
+      qsa('.is-drop-over', els.sessionList).forEach((el) => el.classList.remove('is-drop-over'));
+      zone.closest('.lab-session-group')?.classList.add('is-drop-over');
+    });
+    zone.addEventListener('drop', async (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const sid = state.dragSessionId;
+      state.dragSessionId = '';
+      state.justDroppedSession = true;
+      setTimeout(() => { state.justDroppedSession = false; }, 200);
+      qsa('.is-dragging, .is-drop-over', els.sessionList).forEach((el) => el.classList.remove('is-dragging', 'is-drop-over'));
+      if (!sid) return;
+      const group = zone.closest('.lab-session-group');
+      const project = group?.dataset.project || '';
+      const session = state.sessions.find((item) => item.session_id === sid);
+      if (!session || (session.project || '') === project) return;
+      if (project) {
+        state.projectFolders.add(project);
+        state.collapsedProjects?.delete(project || 'Unassigned');
+        saveProjectFolders();
+      }
+      await request(`/api/sessions/${encodeURIComponent(sid)}/project`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project }),
+      });
+      flash(project ? `Moved to ${project}` : 'Moved to Unassigned');
+      await loadSessions();
+    });
+  });
 }
 
 function contextMenu() {
@@ -1206,10 +1339,9 @@ function contextMenu() {
 }
 
 function bindSidebarContextMenu() {
-  els.sessionList?.addEventListener('contextmenu', (event) => {
+  els.navSessionsBlock?.addEventListener('contextmenu', (event) => {
     const sessionEl = event.target.closest('.lab-session-item');
     const projectEl = event.target.closest('.lab-session-group__head');
-    if (!sessionEl && !projectEl) return;
     event.preventDefault();
     event.stopPropagation();
     if (sessionEl) {
@@ -1217,7 +1349,7 @@ function bindSidebarContextMenu() {
       if (session) showContextMenu(event, { type: 'session', session });
       return;
     }
-    const project = projectEl.dataset.project || '';
+    const project = projectEl?.dataset.project || '';
     const label = project || 'Unassigned';
     const sessions = state.sessions.filter((item) => (item.project || '') === project);
     showContextMenu(event, { type: 'project', project, label, sessions });
@@ -1235,7 +1367,9 @@ function showContextMenu(event, target) {
   menu._target = target;
   menu.innerHTML = target.type === 'session'
     ? sessionMenuHtml(target.session)
-    : projectMenuHtml(target);
+    : target.type === 'message'
+      ? messageMenuHtml(target)
+      : projectMenuHtml(target);
   menu.hidden = false;
   const rect = menu.getBoundingClientRect();
   const left = Math.min(event.clientX, window.innerWidth - rect.width - 8);
@@ -1280,9 +1414,22 @@ function projectMenuHtml(target) {
   `;
 }
 
+function messageMenuHtml(target) {
+  const role = target.root?.classList.contains('lab-chat-msg--user') ? 'message' : 'reply';
+  return `
+    <div class="lab-context-menu__title">${role === 'reply' ? 'Assistant reply' : 'Your message'}</div>
+    ${menuButton('copy-message', '⧉', `Copy ${role}`)}
+    ${menuButton('edit-message', '✎', `Edit ${role}`)}
+    ${role === 'reply' ? menuButton('retry-message', '↻', 'Retry from prior message') : ''}
+    <div class="lab-context-menu__sep"></div>
+    ${menuButton('delete-message', '✕', `Delete ${role}…`, '', true)}
+  `;
+}
+
 async function runContextAction(action, target) {
   if (target.type === 'session') await runSessionContextAction(action, target.session);
   if (target.type === 'project') await runProjectContextAction(action, target);
+  if (target.type === 'message') await runMessageContextAction(action, target);
 }
 
 async function runSessionContextAction(action, session) {
@@ -1292,8 +1439,8 @@ async function runSessionContextAction(action, session) {
     return;
   }
   if (action === 'rename-session') {
-    const title = (window.prompt('Rename session', session.title || '') || '').trim();
-    if (!title) return;
+    const title = await appPrompt('Rename chat', session.title || '', { confirmLabel: 'Rename' });
+    if (title === null || !title) return;
     await request(`/api/sessions/${encodeURIComponent(session.session_id)}/title`, {
       method: 'PUT',
       headers: { 'Content-Type': 'application/json' },
@@ -1302,7 +1449,8 @@ async function runSessionContextAction(action, session) {
     flash('Session renamed');
   }
   if (action === 'move-session') {
-    const project = (window.prompt('Move to project (blank = Unassigned)', session.project || '') || '').trim();
+    const project = await appPrompt('Move to folder', session.project || '', { message: 'Leave blank to move this chat to Unassigned.', confirmLabel: 'Move', required: false });
+    if (project === null) return;
     if (project) {
       state.projectFolders.add(project);
       saveProjectFolders();
@@ -1315,12 +1463,12 @@ async function runSessionContextAction(action, session) {
     flash(project ? `Moved to ${project}` : 'Moved to Unassigned');
   }
   if (action === 'clear-session') {
-    if (!window.confirm(`Clear history for "${session.title || 'New chat'}"?`)) return;
+    if (!await appConfirm('Clear chat history?', `Clear history for "${session.title || 'New chat'}"?`, { confirmLabel: 'Clear', danger: true })) return;
     await request(`/api/sessions/${encodeURIComponent(session.session_id)}/history`, { method: 'DELETE' });
     flash('Session history cleared');
   }
   if (action === 'delete-session') {
-    if (!window.confirm(`Delete "${session.title || 'New chat'}"?`)) return;
+    if (!await appConfirm('Delete chat?', `Delete "${session.title || 'New chat'}"?`, { confirmLabel: 'Delete', danger: true })) return;
     await request(`/api/sessions/${encodeURIComponent(session.session_id)}`, { method: 'DELETE' });
     if (state.sessionId === session.session_id) {
       state.sessionId = '';
@@ -1348,8 +1496,8 @@ async function runProjectContextAction(action, target) {
     await createSessionInProject(target.project);
   }
   if (action === 'rename-project') {
-    const next = (window.prompt(target.project ? 'Rename folder' : 'Move unassigned chats to folder', target.project || '') || '').trim();
-    if (!next && target.project) return;
+    const next = await appPrompt(target.project ? 'Rename folder' : 'Move unassigned chats to folder', target.project || '', { confirmLabel: target.project ? 'Rename' : 'Move', required: Boolean(!target.project) });
+    if (next === null || (!next && target.project)) return;
     if (target.project) {
       state.projectFolders.delete(target.project);
       if (next) state.projectFolders.add(next);
@@ -1373,7 +1521,7 @@ async function runProjectContextAction(action, target) {
     await grillProject(target.project);
   }
   if (action === 'delete-project') {
-    if (!sessions.length || !window.confirm(`Delete ${sessions.length} session${sessions.length === 1 ? '' : 's'} in "${target.label}"?`)) return;
+    if (!sessions.length || !await appConfirm('Delete folder chats?', `Delete ${sessions.length} session${sessions.length === 1 ? '' : 's'} in "${target.label}"?`, { confirmLabel: 'Delete', danger: true })) return;
     await Promise.all(sessions.map((session) => request(`/api/sessions/${encodeURIComponent(session.session_id)}`, { method: 'DELETE' })));
     if (sessions.some((session) => session.session_id === state.sessionId)) {
       state.sessionId = '';
@@ -1387,7 +1535,7 @@ async function runProjectContextAction(action, target) {
   if (action === 'delete-folder') {
     if (!target.project) return;
     if (sessions.length) {
-      const move = window.confirm(`Remove folder "${target.label}" and move ${sessions.length} chat${sessions.length === 1 ? '' : 's'} to Unassigned?`);
+      const move = await appConfirm('Remove folder label?', `Remove folder "${target.label}" and move ${sessions.length} chat${sessions.length === 1 ? '' : 's'} to Unassigned?`, { confirmLabel: 'Remove folder', danger: true });
       if (!move) return;
       await Promise.all(sessions.map((session) => request(`/api/sessions/${encodeURIComponent(session.session_id)}/project`, {
         method: 'PUT',
@@ -1403,8 +1551,8 @@ async function runProjectContextAction(action, target) {
 }
 
 async function createProjectFolder(initial = '') {
-  const name = (window.prompt('New folder name', initial) || '').trim();
-  if (!name) return '';
+  const name = await appPrompt('New folder name', initial, { confirmLabel: 'Create' });
+  if (name === null || !name) return '';
   state.projectFolders.add(name);
   saveProjectFolders();
   renderSessions();
@@ -1487,7 +1635,7 @@ async function openSession(id, { force = false } = {}) {
   try {
     const data = await request(`/api/sessions/${encodeURIComponent(state.sessionId)}/history?limit=200`);
     els.messages.innerHTML = '';
-    for (const item of data.history || []) addMessage(item.role, item.content);
+    (data.history || []).forEach((item, index) => addMessage(item.role, item.content, null, { messageIndex: index }));
     // Re-attach any in-flight stream belonging to this session so the user
     // sees their pending user message + the live "Thinking…" bubble after
     // navigating back. Only re-attach if the live message isn't already in
@@ -1532,8 +1680,8 @@ function startNewSession() {
  * into it later through the folder/session context menus.
  */
 async function startNewProject() {
-  const name = (window.prompt('New folder name', '') || '').trim();
-  if (!name) return;
+  const name = await appPrompt('New folder name', '', { confirmLabel: 'Create' });
+  if (name === null || !name) return;
   state.projectFolders.add(name);
   saveProjectFolders();
   renderSessions();
@@ -2158,25 +2306,8 @@ function createStreamingBubble() {
       body._streamingBuffer = '';
       // Close any reasoning item left open mid-stream.
       _closeOpenReasoningItem();
-      // Add the action bar (Copy / Retry / Delete) if it isn't already
-      // attached. Retry replays the user's prior message; Delete drops
-      // the bubble locally.
-      if (!root.querySelector('.lab-chat-actions')) {
-        const actions = document.createElement('div');
-        actions.className = 'lab-chat-actions';
-        actions.innerHTML = `
-          <button class="lab-chat-actions__btn" data-action="copy" type="button" title="Copy reply">⧉ Copy</button>
-          <button class="lab-chat-actions__btn" data-action="retry" type="button" title="Send the prior user message again">↻ Retry</button>
-          <button class="lab-chat-actions__btn lab-chat-actions__btn--danger" data-action="delete" type="button" title="Remove this message">✕ Delete</button>
-        `;
-        root.appendChild(actions);
-        actions.addEventListener('click', (event) => {
-          const btn = event.target.closest('[data-action]');
-          if (!btn) return;
-          const kind = btn.dataset.action;
-          handleChatActionClick(kind, root, body, btn);
-        });
-      }
+      root.dataset.rawContent = source;
+      attachChatActions(root, body, { retry: true });
       const stopped = data.stopped_reason || 'done';
       const iter = data.iterations || 0;
       const tools = data.tool_calls || 0;
@@ -2511,6 +2642,7 @@ function chatMetaHtml(stopped, iterations, tools) {
 function addMessage(role, content, data = null, opts = {}) {
   const el = document.createElement('article');
   el.className = `lab-chat-msg lab-chat-msg--${role === 'user' ? 'user' : 'assistant'}`;
+  if (Number.isInteger(opts.messageIndex)) el.dataset.messageIndex = String(opts.messageIndex);
   const text = String(content || '');
   if (text) {
     const body = document.createElement('div');
@@ -2543,54 +2675,133 @@ function addMessage(role, content, data = null, opts = {}) {
     meta.innerHTML = chatMetaHtml(data.stopped_reason || 'done', data.iterations || 0, data.tool_calls || 0);
     el.appendChild(meta);
   }
+  if (role === 'user') {
+    el.dataset.rawContent = text;
+    attachChatActions(el, el.querySelector('.lab-chat-msg__body'), { retry: false });
+  } else if (role === 'assistant') {
+    el.dataset.rawContent = text;
+    attachChatActions(el, el.querySelector('.lab-chat-msg__body'), { retry: true });
+  }
   els.messages.appendChild(el);
   els.messages.scrollTop = els.messages.scrollHeight;
   return el;
 }
 
-/**
- * Action-bar dispatcher (Copy / Retry / Delete).
- *
- * Wired by the streaming bubble's finalize() so each finalized
- * assistant message can be copied, retried, or removed. Retry pulls
- * the latest user message and re-submits it through the composer.
- */
-function handleChatActionClick(kind, root, body, btn) {
-  switch (kind) {
-    case 'copy': {
-      const text = body?.textContent?.trim() || '';
-      if (!text) return;
-      navigator.clipboard.writeText(text).then(
-        () => {
-          const prev = btn.textContent;
-          btn.textContent = '✓ Copied';
-          setTimeout(() => { btn.textContent = prev; }, 1500);
-        },
-        () => { btn.textContent = 'Copy failed'; },
-      );
-      break;
-    }
-    case 'retry': {
-      // Find the most recent user message above this bubble.
-      let prior = root.previousElementSibling;
-      while (prior && !prior.classList.contains('lab-chat-msg--user')) {
-        prior = prior.previousElementSibling;
-      }
-      const userBody = prior?.querySelector('.lab-chat-msg__body');
-      const text = userBody?.textContent?.trim() || '';
-      if (!text || !els.input) return;
-      els.input.value = text;
-      resizeInput();
-      els.input.focus();
-      break;
-    }
-    case 'delete': {
-      root.remove();
-      break;
-    }
-    default:
-      break;
+function messageBodyText(root, body) {
+  return root?.dataset?.rawContent || body?.textContent?.trim() || '';
+}
+
+function showChatMessageMenu(root, body, x, y) {
+  const event = { clientX: x, clientY: y };
+  showContextMenu(event, { type: 'message', root, body });
+}
+
+async function persistMessageEdit(root, content) {
+  const index = messageHistoryIndex(root);
+  if (!state.sessionId || index < 0) return false;
+  await request(`/api/sessions/${encodeURIComponent(state.sessionId)}/history/${encodeURIComponent(String(index))}`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ content }),
+  });
+  return true;
+}
+
+async function persistMessageDelete(root) {
+  const index = messageHistoryIndex(root);
+  if (!state.sessionId || index < 0) return false;
+  await request(`/api/sessions/${encodeURIComponent(state.sessionId)}/history/${encodeURIComponent(String(index))}`, { method: 'DELETE' });
+  return true;
+}
+
+function messageHistoryIndex(root) {
+  if (!root) return -1;
+  if (root.dataset?.messageIndex !== undefined) {
+    const parsed = Number(root.dataset.messageIndex);
+    if (Number.isInteger(parsed) && parsed >= 0) return parsed;
   }
+  const messages = Array.from(els.messages?.querySelectorAll('.lab-chat-msg') || []);
+  return messages.indexOf(root);
+}
+
+function renderEditedMessage(root, body, text) {
+  root.dataset.rawContent = text;
+  if (root.classList.contains('lab-chat-msg--assistant')) {
+    body.innerHTML = renderMarkdown(text);
+    hydrateRenderedMarkdown(body);
+  } else {
+    body.textContent = text;
+  }
+}
+
+function attachChatActions(root, body, options = {}) {
+  if (!root) return;
+  if (root.dataset.contextBound !== '1') {
+    root.dataset.contextBound = '1';
+    root.addEventListener('contextmenu', (event) => {
+      event.preventDefault();
+      showChatMessageMenu(root, body, event.clientX, event.clientY);
+    });
+  }
+}
+
+async function runMessageContextAction(action, target) {
+  if (action === 'copy-message') {
+    await copyChatMessage(target.root, target.body);
+  }
+  if (action === 'edit-message') {
+    await editChatMessage(target.root, target.body);
+  }
+  if (action === 'retry-message') {
+    retryChatMessage(target.root);
+  }
+  if (action === 'delete-message') {
+    await deleteChatMessage(target.root);
+  }
+}
+
+async function copyChatMessage(root, body, btn = null) {
+  const text = messageBodyText(root, body);
+  if (!text) return;
+  await navigator.clipboard.writeText(text);
+  if (btn) {
+    const prev = btn.textContent;
+    btn.textContent = '✓ Copied';
+    setTimeout(() => { btn.textContent = prev; }, 1500);
+  }
+}
+
+function retryChatMessage(root) {
+  let prior = root.previousElementSibling;
+  while (prior && !prior.classList.contains('lab-chat-msg--user')) {
+    prior = prior.previousElementSibling;
+  }
+  const text = messageBodyText(prior, prior?.querySelector('.lab-chat-msg__body'));
+  if (!text || !els.input) return;
+  els.input.value = text;
+  resizeInput();
+  els.input.focus();
+}
+
+async function editChatMessage(root, body) {
+  const current = messageBodyText(root, body);
+  const next = await appPrompt('Edit message history', current, { multiline: true, confirmLabel: 'Save' });
+  if (next === null) return;
+  const clean = String(next || '').trim();
+  if (!clean) return;
+  await persistMessageEdit(root, clean);
+  renderEditedMessage(root, body, clean);
+  flash('Message edited');
+  await loadSessions();
+}
+
+async function deleteChatMessage(root) {
+  const label = root.classList.contains('lab-chat-msg--assistant') ? 'this assistant reply' : 'this message';
+  if (!await appConfirm('Delete message?', `Delete ${label} from chat history? This cannot be undone.`, { confirmLabel: 'Delete', danger: true })) return;
+  await persistMessageDelete(root);
+  root.remove();
+  flash('Message deleted');
+  await loadSessions();
 }
 
 function showEmpty() {
