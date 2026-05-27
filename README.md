@@ -63,7 +63,8 @@ source .venv/bin/activate
 ### 3. Install Augment
 
 ```powershell
-python -m pip install -e .[dev]
+python -m pip install -e ".[all,dev]"
+python -m playwright install chromium
 ```
 
 ### 4. Create a config file
@@ -114,8 +115,16 @@ Core Python dependencies are defined in `pyproject.toml`:
 - `fastapi`
 - `uvicorn[standard]`
 - `httpx`
+- `h2`
 - `pydantic`
 - `PyYAML`
+- `requests`
+
+Optional feature extras:
+
+- `augment[browser]`: Playwright browser automation, screenshots, and Patchwright visual verification.
+- `augment[web]`: DDGS/crawl4ai-powered web/news/research with HTTP and browser fallback.
+- `augment[all]`: Browser and web extras together.
 
 Development dependencies:
 

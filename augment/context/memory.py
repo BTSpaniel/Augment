@@ -68,6 +68,9 @@ class SessionStore:
     def set_project(self, session_id: str, project: str) -> dict[str, Any]:
         return self.set_meta(session_id, project=(project or "").strip()[:80])
 
+    def set_title(self, session_id: str, title: str) -> dict[str, Any]:
+        return self.set_meta(session_id, title=(title or "").strip()[:120])
+
     def project_for(self, session_id: str, *, default: str = "") -> str:
         return str(self.meta(session_id).get("project") or default)
 
@@ -80,7 +83,7 @@ class SessionStore:
             meta = self.meta(path.stem)
             sessions.append({
                 "session_id": path.stem,
-                "title": _title_from_text(first_user or (last.content if last else path.stem)),
+                "title": str(meta.get("title") or "") or _title_from_text(first_user or (last.content if last else path.stem)),
                 "message_count": len(messages),
                 "updated_at": path.stat().st_mtime,
                 "last_role": last.role if last else "",

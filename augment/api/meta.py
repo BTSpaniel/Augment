@@ -52,6 +52,12 @@ class RevealFileBody(BaseModel):
     path: str = ""
 
 
+class FileSnippetBody(BaseModel):
+    path: str = ""
+    start: int = 1
+    end: int = 80
+
+
 class AgentProfileBody(BaseModel):
     name: str = ""
     role: str = ""
@@ -106,6 +112,37 @@ async def reveal_file(body: RevealFileBody) -> dict[str, Any]:
     except Exception as exc:
         raise HTTPException(500, f"could not open file browser: {exc}") from exc
     return {"ok": True, "path": str(resolved)}
+
+
+@router.post("/files/snippet")
+async def file_snippet(body: FileSnippetBody) -> dict[str, Any]:
+    raw = body.path.strip()
+    if not raw:
+        raise HTTPException(400, "path is required")
+    if raw.lower().startswith("file:"):
+        parsed = urlparse(raw)
+        raw = unquote(parsed.path or "")
+        if sys.platform.startswith("win") and raw.startswith("/") and len(raw) >= 3 and raw[2] == ":":
+            raw = raw[1:]
+    candidate = Path(raw).expanduser()
+    resolved = candidate.resolve() if candidate.is_absolute() else (ROOT / candidate).resolve()
+    if not PathGuard().is_safe(str(resolved)):
+        raise HTTPException(400, f"refused sensitive path: {resolved}")
+    if not resolved.exists() or not resolved.is_file():
+        raise HTTPException(404, f"file not found: {resolved}")
+    lines = resolved.read_text(encoding="utf-8", errors="replace").splitlines()
+    total = len(lines)
+    start = max(1, min(int(body.start or 1), max(total, 1)))
+    end = max(start, min(int(body.end or start), min(total, start + 240)))
+    selected = lines[start - 1:end]
+    return {
+        "path": str(resolved),
+        "start": start,
+        "end": end,
+        "total_lines": total,
+        "language": resolved.suffix.lower().lstrip(".") or "text",
+        "content": "\n".join(selected),
+    }
 
 
 @router.get("/toolpacks")
@@ -312,11 +349,23 @@ class SessionProjectBody(BaseModel):
     project: str
 
 
+class SessionTitleBody(BaseModel):
+    title: str
+
+
 @router.put("/sessions/{session_id}/project")
 async def set_session_project(session_id: str, body: SessionProjectBody, request: Request) -> dict[str, Any]:
     return {
         "session_id": session_id,
         "meta": request.app.state.augment.set_session_project(session_id, body.project),
+    }
+
+
+@router.put("/sessions/{session_id}/title")
+async def set_session_title(session_id: str, body: SessionTitleBody, request: Request) -> dict[str, Any]:
+    return {
+        "session_id": session_id,
+        "meta": request.app.state.augment.sessions.set_title(session_id, body.title),
     }
 
 

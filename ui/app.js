@@ -107,6 +107,10 @@ const els = {
   attachImageBtn: qs('#attach-image-btn'),
   attachImageInput: qs('#attach-image-input'),
   composeAttachments: qs('#compose-attachments'),
+  composerQueue: qs('#composer-queue'),
+  permissionBtn: qs('#composer-permission-btn'),
+  permissionMenu: qs('#composer-permission-menu'),
+  composerStopBtn: qs('#composer-stop-btn'),
   thinkingStartBtn: qs('#thinking-start-btn'),
   thinkingStopBtn: qs('#thinking-stop-btn'),
   thinkingRefreshBtn: qs('#thinking-refresh-btn'),
@@ -132,6 +136,11 @@ const state = {
   pendingImages: [],
   // Whether the active provider advertises vision capability.
   visionEnabled: false,
+  queueMode: localStorage.getItem('augment.queueMode') || 'ask',
+  queuedMessages: [],
+  queuePaused: false,
+  activeAbort: null,
+  projectFolders: new Set(JSON.parse(localStorage.getItem('augment.projectFolders') || '[]')),
 };
 
 document.addEventListener('DOMContentLoaded', boot);
@@ -196,15 +205,18 @@ function bindEvents() {
   els.sessionProviderSelect?.addEventListener('change', onSessionProviderChange);
   els.sessionModelSelect?.addEventListener('change', onSessionModelChange);
   els.sessionRefreshModelsBtn?.addEventListener('click', onSessionRefreshModels);
+  bindQueueModePicker();
   bindComposerPickers();
   els.attachImageBtn?.addEventListener('click', () => els.attachImageInput?.click());
   els.attachImageInput?.addEventListener('change', onAttachImageChange);
   els.input?.addEventListener('paste', onComposerPaste);
   els.input?.addEventListener('dragover', onComposerDragOver);
   els.input?.addEventListener('drop', onComposerDrop);
+  els.composerStopBtn?.addEventListener('click', stopActiveChat);
   els.thinkingStartBtn?.addEventListener('click', startThinking);
   els.thinkingStopBtn?.addEventListener('click', stopThinking);
   els.thinkingRefreshBtn?.addEventListener('click', loadThinking);
+  bindSidebarContextMenu();
 }
 
 async function runDiscovery() {
@@ -1096,6 +1108,9 @@ function renderSessions() {
     if (!groups.has(key)) groups.set(key, []);
     groups.get(key).push(s);
   }
+  for (const project of state.projectFolders) {
+    if (!groups.has(project)) groups.set(project, []);
+  }
   // Sort groups by most-recently-updated session inside them.
   const sortedGroups = [...groups.entries()].sort((a, b) => {
     const aTime = Math.max(...a[1].map((s) => s.updated_at || 0));
@@ -1115,19 +1130,22 @@ function renderSessions() {
   els.sessionList.innerHTML = sortedGroups.map(([project, items]) => {
     const label = project || 'Unassigned';
     const collapsed = state.collapsedProjects.has(label);
-    const sessionsHtml = items.map((s) => `
+    const isEmptyFolder = Boolean(project) && items.length === 0;
+    const sessionsHtml = isEmptyFolder
+      ? '<div class="lab-session-group__empty">Empty folder · use ⋯ to add a chat</div>'
+      : items.map((s) => `
       <button class="lab-session-item ${s.session_id === state.sessionId ? 'active' : ''}" data-session="${esc(s.session_id)}" type="button">
         <span class="lab-session-item__name">${esc(s.title || 'New chat')}</span>
         <span class="lab-session-item__meta">${esc(s.last_preview || `${s.message_count || 0} messages`)}</span>
       </button>
     `).join('');
     return `
-      <section class="lab-session-group ${collapsed ? 'is-collapsed' : ''}" data-group="${esc(label)}">
-        <header class="lab-session-group__head" data-toggle-group="${esc(label)}">
+      <section class="lab-session-group ${collapsed ? 'is-collapsed' : ''}" data-group="${esc(label)}" data-project="${esc(project)}">
+        <header class="lab-session-group__head" data-toggle-group="${esc(label)}" data-project="${esc(project)}">
           <span class="lab-session-group__chevron" aria-hidden="true">▾</span>
           <span class="lab-session-group__title">${esc(label)}</span>
           <span class="lab-session-group__count">${items.length}</span>
-          ${project ? `<button class="lab-btn-ghost lab-session-group__grill" data-project="${esc(project)}" type="button" title="Grill all sessions in this project">Grill</button>` : ''}
+          <button class="lab-session-group__menu" data-project-menu="${esc(project)}" type="button" title="Folder actions" aria-label="Folder actions">⋯</button>
         </header>
         <div class="lab-session-group__items">${sessionsHtml}</div>
       </section>
@@ -1143,6 +1161,16 @@ function renderSessions() {
       grillProject(btn.dataset.project);
     }),
   );
+  qsa('.lab-session-group__menu', els.sessionList).forEach((btn) =>
+    btn.addEventListener('click', (event) => {
+      event.preventDefault();
+      event.stopPropagation();
+      const project = btn.dataset.projectMenu || '';
+      const label = project || 'Unassigned';
+      const sessions = state.sessions.filter((item) => (item.project || '') === project);
+      showContextMenu(event, { type: 'project', project, label, sessions });
+    }),
+  );
   // Header click toggles project collapsed state (but not when the click
   // bubbled from the inline Grill button — see stopPropagation above).
   qsa('.lab-session-group__head', els.sessionList).forEach((head) =>
@@ -1154,6 +1182,265 @@ function renderSessions() {
       head.parentElement.classList.toggle('is-collapsed');
     }),
   );
+}
+
+function contextMenu() {
+  let menu = qs('#lab-context-menu');
+  if (menu) return menu;
+  menu = document.createElement('div');
+  menu.id = 'lab-context-menu';
+  menu.className = 'lab-context-menu';
+  menu.hidden = true;
+  document.body.appendChild(menu);
+  menu.addEventListener('click', (event) => {
+    const item = event.target.closest('[data-menu-action]');
+    if (!item || item.classList.contains('is-disabled')) return;
+    const action = item.dataset.menuAction;
+    const target = menu._target || {};
+    hideContextMenu();
+    runContextAction(action, target).catch((error) => {
+      flash(`Context action failed: ${error.message || error}`);
+    });
+  });
+  return menu;
+}
+
+function bindSidebarContextMenu() {
+  els.sessionList?.addEventListener('contextmenu', (event) => {
+    const sessionEl = event.target.closest('.lab-session-item');
+    const projectEl = event.target.closest('.lab-session-group__head');
+    if (!sessionEl && !projectEl) return;
+    event.preventDefault();
+    event.stopPropagation();
+    if (sessionEl) {
+      const session = state.sessions.find((item) => item.session_id === sessionEl.dataset.session);
+      if (session) showContextMenu(event, { type: 'session', session });
+      return;
+    }
+    const project = projectEl.dataset.project || '';
+    const label = project || 'Unassigned';
+    const sessions = state.sessions.filter((item) => (item.project || '') === project);
+    showContextMenu(event, { type: 'project', project, label, sessions });
+  });
+  document.addEventListener('click', hideContextMenu);
+  document.addEventListener('keydown', (event) => {
+    if (event.key === 'Escape') hideContextMenu();
+  });
+  window.addEventListener('resize', hideContextMenu);
+  window.addEventListener('scroll', hideContextMenu, true);
+}
+
+function showContextMenu(event, target) {
+  const menu = contextMenu();
+  menu._target = target;
+  menu.innerHTML = target.type === 'session'
+    ? sessionMenuHtml(target.session)
+    : projectMenuHtml(target);
+  menu.hidden = false;
+  const rect = menu.getBoundingClientRect();
+  const left = Math.min(event.clientX, window.innerWidth - rect.width - 8);
+  const top = Math.min(event.clientY, window.innerHeight - rect.height - 8);
+  menu.style.left = `${Math.max(8, left)}px`;
+  menu.style.top = `${Math.max(8, top)}px`;
+}
+
+function hideContextMenu() {
+  const menu = qs('#lab-context-menu');
+  if (!menu || menu.hidden) return;
+  menu.hidden = true;
+  menu._target = null;
+}
+
+function menuButton(action, icon, label, hint = '', danger = false) {
+  return `<button class="lab-context-menu__item ${danger ? 'lab-context-menu__item--danger' : ''}" data-menu-action="${esc(action)}" type="button"><span class="lab-context-menu__icon">${icon}</span><span>${esc(label)}</span>${hint ? `<kbd>${esc(hint)}</kbd>` : ''}</button>`;
+}
+
+function sessionMenuHtml(session) {
+  return `
+    <div class="lab-context-menu__title">${esc(session.title || 'New chat')}</div>
+    ${menuButton('open-session', '↗', 'Open')}
+    ${menuButton('rename-session', '✎', 'Rename chat')}
+    ${menuButton('move-session', '▣', 'Move to folder')}
+    <div class="lab-context-menu__sep"></div>
+    ${menuButton('clear-session', '⌫', 'Clear history')}
+    ${menuButton('delete-session', '✕', 'Delete chat', '', true)}
+  `;
+}
+
+function projectMenuHtml(target) {
+  return `
+    <div class="lab-context-menu__title">${esc(target.label)}</div>
+    ${menuButton('new-session-project', '+', 'New chat in folder')}
+    ${menuButton('new-folder', '□', 'New folder')}
+    ${menuButton('rename-project', '✎', target.project ? 'Rename folder' : 'Move unassigned to folder')}
+    ${target.project ? menuButton('grill-project-menu', '◆', 'Summarize folder') : ''}
+    <div class="lab-context-menu__sep"></div>
+    ${target.project ? menuButton('delete-folder', '⌫', 'Delete folder label') : ''}
+    ${menuButton('delete-project', '✕', `Delete ${target.sessions.length} chat${target.sessions.length === 1 ? '' : 's'}`, '', true)}
+  `;
+}
+
+async function runContextAction(action, target) {
+  if (target.type === 'session') await runSessionContextAction(action, target.session);
+  if (target.type === 'project') await runProjectContextAction(action, target);
+}
+
+async function runSessionContextAction(action, session) {
+  if (!session?.session_id) return;
+  if (action === 'open-session') {
+    await openSession(session.session_id);
+    return;
+  }
+  if (action === 'rename-session') {
+    const title = (window.prompt('Rename session', session.title || '') || '').trim();
+    if (!title) return;
+    await request(`/api/sessions/${encodeURIComponent(session.session_id)}/title`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ title }),
+    });
+    flash('Session renamed');
+  }
+  if (action === 'move-session') {
+    const project = (window.prompt('Move to project (blank = Unassigned)', session.project || '') || '').trim();
+    if (project) {
+      state.projectFolders.add(project);
+      saveProjectFolders();
+    }
+    await request(`/api/sessions/${encodeURIComponent(session.session_id)}/project`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project }),
+    });
+    flash(project ? `Moved to ${project}` : 'Moved to Unassigned');
+  }
+  if (action === 'clear-session') {
+    if (!window.confirm(`Clear history for "${session.title || 'New chat'}"?`)) return;
+    await request(`/api/sessions/${encodeURIComponent(session.session_id)}/history`, { method: 'DELETE' });
+    flash('Session history cleared');
+  }
+  if (action === 'delete-session') {
+    if (!window.confirm(`Delete "${session.title || 'New chat'}"?`)) return;
+    await request(`/api/sessions/${encodeURIComponent(session.session_id)}`, { method: 'DELETE' });
+    if (state.sessionId === session.session_id) {
+      state.sessionId = '';
+      localStorage.removeItem('augment.sessionId');
+      els.messages.innerHTML = '';
+      showEmpty();
+      updateSessionHeader();
+    }
+    flash('Session deleted');
+  }
+  await loadSessions();
+}
+
+async function runProjectContextAction(action, target) {
+  const sessions = target.sessions || [];
+  if (action === 'new-folder') {
+    await createProjectFolder();
+    return;
+  }
+  if (action === 'new-session-project') {
+    if (!target.project) {
+      startNewSession();
+      return;
+    }
+    await createSessionInProject(target.project);
+  }
+  if (action === 'rename-project') {
+    const next = (window.prompt(target.project ? 'Rename folder' : 'Move unassigned chats to folder', target.project || '') || '').trim();
+    if (!next && target.project) return;
+    if (target.project) {
+      state.projectFolders.delete(target.project);
+      if (next) state.projectFolders.add(next);
+      saveProjectFolders();
+    } else if (next) {
+      state.projectFolders.add(next);
+      saveProjectFolders();
+    }
+    await Promise.all(sessions.map((session) => request(`/api/sessions/${encodeURIComponent(session.session_id)}/project`, {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ project: next }),
+    })));
+    flash(target.project ? `Folder renamed to ${next || 'Unassigned'}` : `Moved unassigned chats to ${next}`);
+  }
+  if (action === 'grill-project-menu') {
+    if (!target.project) {
+      flash('Assign sessions to a project before grilling.');
+      return;
+    }
+    await grillProject(target.project);
+  }
+  if (action === 'delete-project') {
+    if (!sessions.length || !window.confirm(`Delete ${sessions.length} session${sessions.length === 1 ? '' : 's'} in "${target.label}"?`)) return;
+    await Promise.all(sessions.map((session) => request(`/api/sessions/${encodeURIComponent(session.session_id)}`, { method: 'DELETE' })));
+    if (sessions.some((session) => session.session_id === state.sessionId)) {
+      state.sessionId = '';
+      localStorage.removeItem('augment.sessionId');
+      els.messages.innerHTML = '';
+      showEmpty();
+      updateSessionHeader();
+    }
+    flash('Project sessions deleted');
+  }
+  if (action === 'delete-folder') {
+    if (!target.project) return;
+    if (sessions.length) {
+      const move = window.confirm(`Remove folder "${target.label}" and move ${sessions.length} chat${sessions.length === 1 ? '' : 's'} to Unassigned?`);
+      if (!move) return;
+      await Promise.all(sessions.map((session) => request(`/api/sessions/${encodeURIComponent(session.session_id)}/project`, {
+        method: 'PUT',
+        headers: { 'Content-Type': 'application/json' },
+        body: JSON.stringify({ project: '' }),
+      })));
+    }
+    state.projectFolders.delete(target.project);
+    saveProjectFolders();
+    flash(`Folder "${target.label}" removed`);
+  }
+  await loadSessions();
+}
+
+async function createProjectFolder(initial = '') {
+  const name = (window.prompt('New folder name', initial) || '').trim();
+  if (!name) return '';
+  state.projectFolders.add(name);
+  saveProjectFolders();
+  renderSessions();
+  flash(`Folder "${name}" created`);
+  return name;
+}
+
+function saveProjectFolders() {
+  localStorage.setItem('augment.projectFolders', JSON.stringify([...state.projectFolders].sort((a, b) => a.localeCompare(b))));
+}
+
+async function createSessionInProject(project) {
+  const sid = `sess_${Math.random().toString(16).slice(2, 14)}`;
+  state.sessionId = sid;
+  localStorage.setItem('augment.sessionId', sid);
+  els.messages.innerHTML = '';
+  showEmpty();
+  updateSessionHeader();
+  openPage('sessions');
+  state.sessions.unshift({
+    session_id: sid,
+    title: 'New chat',
+    project,
+    message_count: 0,
+    updated_at: Date.now() / 1000,
+    last_preview: '',
+    last_role: 'user',
+  });
+  renderSessions();
+  await request(`/api/sessions/${encodeURIComponent(sid)}/project`, {
+    method: 'PUT',
+    headers: { 'Content-Type': 'application/json' },
+    body: JSON.stringify({ project }),
+  });
+  flash(`New session in ${project}`);
+  els.input.focus();
 }
 
 async function grillProject(project) {
@@ -1241,45 +1528,17 @@ function startNewSession() {
 }
 
 /**
- * "+ New Project" — prompts for a project name, creates a local session
- * tagged with that project, opens it, and persists the project tag via
- * the existing /api/sessions/{id}/project endpoint so it shows up in the
- * project tree immediately.
+ * "+ New Project" creates a persistent local folder label. Chats are moved
+ * into it later through the folder/session context menus.
  */
 async function startNewProject() {
-  const name = (window.prompt('Project name', '') || '').trim();
+  const name = (window.prompt('New folder name', '') || '').trim();
   if (!name) return;
-  const sid = `sess_${Math.random().toString(16).slice(2, 14)}`;
-  state.sessionId = sid;
-  localStorage.setItem('augment.sessionId', sid);
-  els.messages.innerHTML = '';
-  showEmpty();
-  els.mailboxList && (els.mailboxList.innerHTML = '');
-  updateSessionHeader();
-  openPage('sessions');
-  // Optimistically insert a stub session so the project shows up in the
-  // sidebar before the server round-trip completes.
-  state.sessions.unshift({
-    session_id: sid,
-    title: 'New chat',
-    project: name,
-    message_count: 0,
-    updated_at: Date.now() / 1000,
-    last_preview: '',
-    last_role: 'user',
-  });
+  state.projectFolders.add(name);
+  saveProjectFolders();
   renderSessions();
-  try {
-    await request(`/api/sessions/${encodeURIComponent(sid)}/project`, {
-      method: 'PUT',
-      headers: { 'Content-Type': 'application/json' },
-      body: JSON.stringify({ project: name }),
-    });
-    flash(`Project "${name}" created`);
-    await loadSessions();
-  } catch (error) {
-    flash(`Could not save project: ${error.message}`);
-  }
+  flash(`Folder "${name}" created`);
+  openPage('sessions');
   els.input.focus();
 }
 
@@ -1329,17 +1588,24 @@ async function submitChat(event) {
   const text = els.input.value.trim();
   const images = state.pendingImages.map((img) => img.dataUrl);
   if (!text && !images.length) return;
+  const imageThumbs = state.pendingImages.slice();
   if (!state.sessionId) startNewSession();
   els.input.value = '';
   resizeInput();
-  clearEmpty();
-  const userEl = addMessage('user', text, null, { imageThumbs: state.pendingImages.slice() });
-  // Clear the queued attachments now that they're attached to the bubble +
-  // about to be sent — keeps the composer thumb strip in sync with the chat.
   state.pendingImages = [];
   renderPendingImages();
+  if (state.activeStreams.has(state.sessionId)) {
+    enqueueChatMessage(text, images, imageThumbs);
+    return;
+  }
+  await sendChatMessage(text, images, imageThumbs);
+}
+
+async function sendChatMessage(text, images = [], imageThumbs = []) {
+  if (!state.sessionId) startNewSession();
+  clearEmpty();
+  const userEl = addMessage('user', text, null, { imageThumbs });
   setStatusbar('thinking', 'Thinking');
-  els.form.querySelector('button[type="submit"]').disabled = true;
 
   // Pin this chat run to the session that was active when the user hit send.
   // If the user navigates to a different session mid-stream, we use this id
@@ -1358,12 +1624,15 @@ async function submitChat(event) {
 
   // Register the in-flight bubble + the user message DOM node so we can
   // re-attach them when the user navigates back to this session.
-  state.activeStreams.set(requestSessionId, { userEl, bubble });
+  const controller = new AbortController();
+  state.activeAbort = controller;
+  if (els.composerStopBtn) els.composerStopBtn.hidden = false;
+  state.activeStreams.set(requestSessionId, { userEl, bubble, controller });
 
   try {
     await chatStream(text, requestSessionId, (eventType, data) => {
       handleChatEvent(bubble, eventType, data, requestSessionId);
-    }, images);
+    }, images, controller.signal);
     // Always refresh the sidebar/agent — but only realign the header/status
     // if the user is still looking at the session this chat belonged to.
     await Promise.all([loadSessions(), loadAgent(), loadMemory()]);
@@ -1372,13 +1641,178 @@ async function submitChat(event) {
       setStatusbar('idle', 'Idle');
     }
   } catch (error) {
-    bubble.finalize(`Error: ${error.message || error}`, { stopped_reason: 'error' });
-    if (state.sessionId === requestSessionId) setStatusbar('error', 'Error');
+    if (error?.name === 'AbortError') {
+      bubble.finalize('Stopped by user.', { stopped_reason: 'stopped' });
+      if (state.sessionId === requestSessionId) setStatusbar('idle', 'Stopped');
+    } else {
+      bubble.finalize(`Error: ${error.message || error}`, { stopped_reason: 'error' });
+      if (state.sessionId === requestSessionId) setStatusbar('error', 'Error');
+    }
   } finally {
     state.activeStreams.delete(requestSessionId);
-    els.form.querySelector('button[type="submit"]').disabled = false;
+    if (state.activeAbort === controller) state.activeAbort = null;
+    if (!state.activeAbort && els.composerStopBtn) els.composerStopBtn.hidden = true;
     els.input.focus();
+    drainQueuedMessages();
   }
+}
+
+function stopActiveChat() {
+  if (!state.activeAbort) return;
+  state.activeAbort.abort();
+  flash('Stopped current reply');
+}
+
+function enqueueChatMessage(text, images = [], imageThumbs = []) {
+  if (state.queueMode === 'none') {
+    flash('Queue is off. Wait for the current reply to finish, or switch queue mode to Ask/Full.');
+    return;
+  }
+  state.queuedMessages.push({
+    id: `qm_${Date.now().toString(36)}_${Math.random().toString(16).slice(2, 7)}`,
+    text,
+    images,
+    imageThumbs,
+    createdAt: Date.now(),
+  });
+  state.queuePaused = state.queueMode === 'ask';
+  renderComposerQueue();
+  flash(`Queued ${state.queuedMessages.length} message${state.queuedMessages.length === 1 ? '' : 's'}`);
+}
+
+function drainQueuedMessages(force = false) {
+  if (!state.queuedMessages.length || state.activeStreams.has(state.sessionId)) {
+    renderComposerQueue();
+    return;
+  }
+  if (!force && (state.queueMode !== 'full' || state.queuePaused)) {
+    renderComposerQueue();
+    return;
+  }
+  const next = state.queuedMessages.shift();
+  renderComposerQueue();
+  if (!next) return;
+  sendChatMessage(next.text, next.images, next.imageThumbs);
+}
+
+function renderComposerQueue() {
+  const root = els.composerQueue;
+  if (!root) return;
+  const count = state.queuedMessages.length;
+  if (!count) {
+    root.hidden = true;
+    root.innerHTML = '';
+    return;
+  }
+  root.hidden = false;
+  root.innerHTML = `
+    <div class="lab-composer-queue__head">
+      <strong>${count} message${count === 1 ? '' : 's'} queued</strong>
+      <span>${queueModeLabel(state.queueMode)}</span>
+    </div>
+    <div class="lab-composer-queue__items">
+      ${state.queuedMessages.map((item) => `
+        <div class="lab-composer-queue__item" data-queue-id="${esc(item.id)}">
+          <span class="lab-composer-queue__drag" aria-hidden="true">⠿</span>
+          <span class="lab-composer-queue__text">${esc(item.text || `${item.images.length} image${item.images.length === 1 ? '' : 's'}`)}</span>
+          ${item.images.length ? `<span class="lab-composer-queue__files">${item.images.length} image${item.images.length === 1 ? '' : 's'}</span>` : ''}
+          <button class="lab-composer-queue__remove" data-queue-remove="${esc(item.id)}" type="button" title="Remove queued message">×</button>
+        </div>
+      `).join('')}
+    </div>
+    <div class="lab-composer-queue__actions">
+      <button class="lab-composer-queue__btn" data-queue-action="run-next" type="button">Run next</button>
+      <button class="lab-composer-queue__btn" data-queue-action="accept-all" type="button">Accept all</button>
+      <button class="lab-composer-queue__btn lab-composer-queue__btn--danger" data-queue-action="reject-all" type="button">Reject all</button>
+    </div>
+  `;
+  root.querySelectorAll('[data-queue-remove]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      state.queuedMessages = state.queuedMessages.filter((item) => item.id !== btn.dataset.queueRemove);
+      renderComposerQueue();
+    });
+  });
+  root.querySelectorAll('[data-queue-action]').forEach((btn) => {
+    btn.addEventListener('click', () => {
+      const action = btn.dataset.queueAction;
+      if (action === 'reject-all') {
+        state.queuedMessages = [];
+        state.queuePaused = false;
+        renderComposerQueue();
+        return;
+      }
+      if (action === 'accept-all') {
+        state.queuePaused = false;
+        state.queueMode = 'full';
+        localStorage.setItem('augment.queueMode', state.queueMode);
+        renderQueueMode();
+        drainQueuedMessages(true);
+        return;
+      }
+      if (action === 'run-next') {
+        state.queuePaused = state.queueMode === 'ask';
+        drainQueuedMessages(true);
+      }
+    });
+  });
+}
+
+function queueModeLabel(mode) {
+  if (mode === 'full') return 'Full access';
+  if (mode === 'none') return 'No queue';
+  return 'Ask before running';
+}
+
+function bindQueueModePicker() {
+  if (!els.permissionBtn || !els.permissionMenu) return;
+  renderQueueMode();
+  els.permissionBtn.addEventListener('click', (event) => {
+    event.preventDefault();
+    const expanded = els.permissionBtn.getAttribute('aria-expanded') === 'true';
+    els.permissionBtn.setAttribute('aria-expanded', expanded ? 'false' : 'true');
+    els.permissionMenu.hidden = expanded;
+  });
+  els.permissionMenu.addEventListener('click', (event) => {
+    const btn = event.target.closest('[data-queue-mode]');
+    if (!btn) return;
+    state.queueMode = btn.dataset.queueMode || 'ask';
+    state.queuePaused = state.queueMode === 'ask' && state.queuedMessages.length > 0;
+    localStorage.setItem('augment.queueMode', state.queueMode);
+    els.permissionBtn.setAttribute('aria-expanded', 'false');
+    els.permissionMenu.hidden = true;
+    renderQueueMode();
+    if (state.queueMode === 'full') drainQueuedMessages(true);
+  });
+  document.addEventListener('click', (event) => {
+    if (els.permissionMenu.hidden) return;
+    if (event.target.closest('#composer-permission-btn') || event.target.closest('#composer-permission-menu')) return;
+    els.permissionBtn.setAttribute('aria-expanded', 'false');
+    els.permissionMenu.hidden = true;
+  });
+}
+
+function renderQueueMode() {
+  if (!els.permissionBtn || !els.permissionMenu) return;
+  const modes = [
+    { id: 'ask', icon: '◷', label: 'Ask', hint: 'Queue prompts and ask before running the next one' },
+    { id: 'full', icon: '⚡', label: 'Full', hint: 'Automatically run queued prompts in order' },
+    { id: 'none', icon: '⏸', label: 'None', hint: 'Do not queue while a reply is running' },
+  ];
+  const current = modes.find((mode) => mode.id === state.queueMode) || modes[0];
+  els.permissionBtn.querySelector('[data-permission-icon]').textContent = current.icon;
+  els.permissionBtn.querySelector('[data-permission-label]').textContent = current.label;
+  els.permissionBtn.title = `Queue mode: ${current.label}`;
+  els.permissionMenu.innerHTML = modes.map((mode) => `
+    <button class="lab-permission-menu__item ${mode.id === current.id ? 'active' : ''}" data-queue-mode="${esc(mode.id)}" type="button" role="menuitem">
+      <span class="lab-permission-menu__icon">${esc(mode.icon)}</span>
+      <span class="lab-permission-menu__body">
+        <strong>${esc(mode.label)}</strong>
+        <small>${esc(mode.hint)}</small>
+      </span>
+      ${mode.id === current.id ? '<span class="lab-permission-menu__check">✓</span>' : ''}
+    </button>
+  `).join('');
+  renderComposerQueue();
 }
 
 function upsertSidebarSession(sessionId, previewText) {
@@ -1401,10 +1835,11 @@ function upsertSidebarSession(sessionId, previewText) {
 }
 
 /** Stream chat events over SSE, invoking `onEvent(type, data)` for each. */
-async function chatStream(message, sessionId, onEvent, images = []) {
+async function chatStream(message, sessionId, onEvent, images = [], signal = null) {
   const response = await fetch('/api/chat/stream', {
     method: 'POST',
     headers: { 'Content-Type': 'application/json' },
+    signal,
     body: JSON.stringify({
       message,
       session_id: sessionId || '',
@@ -1746,7 +2181,7 @@ function createStreamingBubble() {
       const iter = data.iterations || 0;
       const tools = data.tool_calls || 0;
       meta.hidden = false;
-      meta.textContent = `${stopped} · ${iter} iter · ${tools} tools`;
+      meta.innerHTML = chatMetaHtml(stopped, iter, tools);
       root.classList.remove('lab-chat-msg--streaming');
       // Collapse the reasoning panel on completion (kills the pulse) so
       // the final answer is the focal point — but leave it in the DOM
@@ -1770,24 +2205,40 @@ function attachReceiptDiff(artifactEl, receipt) {
   if (receipt.status === 'blocked') wrap.classList.add('lab-chat-receipt--blocked');
 
   const summary = document.createElement('summary');
-  const fileNames = targets.map((t) => t.path).join(', ').slice(0, 96);
-  const verb = receipt.status === 'blocked' ? '⛔ blocked' : (receipt.success ? '◆ diff' : '× failed');
-  summary.innerHTML = `<span class="lab-chat-receipt__verb">${esc(verb)}</span><span class="lab-chat-receipt__files">${esc(fileNames || 'no targets')}</span>`;
+  const counts = receiptChangeCounts(targets);
+  const verb = receipt.status === 'blocked' ? 'blocked' : (receipt.success ? 'files changed' : 'failed');
+  summary.innerHTML = `
+    <span class="lab-chat-receipt__verb">${receipt.status === 'blocked' ? '⛔' : '◆'} ${esc(verb)}</span>
+    <span class="lab-chat-receipt__badges">
+      ${counts.created ? `<span class="lab-file-badge lab-file-badge--created">+${counts.created} new</span>` : ''}
+      ${counts.modified ? `<span class="lab-file-badge lab-file-badge--modified">~${counts.modified} edited</span>` : ''}
+      ${counts.deleted ? `<span class="lab-file-badge lab-file-badge--deleted">-${counts.deleted} removed</span>` : ''}
+      ${counts.unchanged ? `<span class="lab-file-badge">${counts.unchanged} checked</span>` : ''}
+    </span>
+  `;
   wrap.appendChild(summary);
 
   for (const target of targets) {
     const block = document.createElement('div');
-    block.className = 'lab-chat-receipt__target';
+    const op = receiptTargetOperation(target);
+    block.className = `lab-chat-receipt__target lab-chat-receipt__target--${op.kind}`;
     const ranges = Array.isArray(target.changed_ranges) ? target.changed_ranges : [];
     const totalLines = ranges.reduce((acc, r) => acc + Math.max(0, (r.after_end || 0) - (r.after_start || 0) + 1), 0);
     const meta = [];
+    if (target.before_hash && target.after_hash && target.before_hash !== target.after_hash) meta.push('hash changed');
     if (target.full_rewrite) meta.push('full rewrite');
     if (!target.pattern_preserved && !target.full_rewrite) meta.push('pattern disturbed');
     if (target.changed_sections?.length) meta.push(`sections: ${target.changed_sections.slice(0, 4).join(', ')}`);
     if (totalLines) meta.push(`${ranges.length} hunk${ranges.length === 1 ? '' : 's'} · ${totalLines} lines`);
     block.innerHTML = `
-      <div class="lab-chat-receipt__path">${esc(target.path)}</div>
-      ${meta.length ? `<div class="lab-chat-receipt__meta">${esc(meta.join(' · '))}</div>` : ''}
+      <header class="lab-chat-receipt__target-head">
+        <span class="lab-file-badge lab-file-badge--${op.kind}">${esc(op.label)}</span>
+        <span class="lab-chat-receipt__path" title="${esc(target.path)}">${esc(target.path)}</span>
+      </header>
+      <div class="lab-chat-receipt__meta">
+        <span>${esc(receipt.tool || 'tool')}</span>
+        ${meta.map((item) => `<span>${esc(item)}</span>`).join('')}
+      </div>
     `;
     const diff = String(target.diff_preview || '').trim();
     if (diff) {
@@ -1799,6 +2250,26 @@ function attachReceiptDiff(artifactEl, receipt) {
     wrap.appendChild(block);
   }
   artifactEl.appendChild(wrap);
+}
+
+function receiptTargetOperation(target) {
+  if (target?.existed_before === false && target?.exists_after) return { kind: 'created', label: 'created' };
+  if (target?.existed_before && target?.exists_after === false) return { kind: 'deleted', label: 'deleted' };
+  if (target?.before_hash && target?.after_hash && target.before_hash !== target.after_hash) return { kind: 'modified', label: 'edited' };
+  if (target?.diff_preview) return { kind: 'modified', label: 'edited' };
+  return { kind: 'checked', label: 'checked' };
+}
+
+function receiptChangeCounts(targets) {
+  const counts = { created: 0, modified: 0, deleted: 0, unchanged: 0 };
+  for (const target of targets) {
+    const op = receiptTargetOperation(target).kind;
+    if (op === 'created') counts.created += 1;
+    else if (op === 'modified') counts.modified += 1;
+    else if (op === 'deleted') counts.deleted += 1;
+    else counts.unchanged += 1;
+  }
+  return counts;
 }
 
 function handleChatEvent(bubble, type, data, requestSessionId) {
@@ -2026,6 +2497,17 @@ async function loadMemory() {
 }
 
 /* ── Chat rendering ──────────────────────────────────────────────── */
+function chatMetaHtml(stopped, iterations, tools) {
+  const status = String(stopped || 'done').replace(/_/g, ' ');
+  const iter = Number(iterations || 0);
+  const toolCount = Number(tools || 0);
+  return `
+    <span class="lab-chat-meta-chip lab-chat-meta-chip--status">${esc(status)}</span>
+    <span class="lab-chat-meta-chip"><strong>${esc(String(iter))}</strong> iter</span>
+    <span class="lab-chat-meta-chip"><strong>${esc(String(toolCount))}</strong> tools</span>
+  `;
+}
+
 function addMessage(role, content, data = null, opts = {}) {
   const el = document.createElement('article');
   el.className = `lab-chat-msg lab-chat-msg--${role === 'user' ? 'user' : 'assistant'}`;
@@ -2058,7 +2540,7 @@ function addMessage(role, content, data = null, opts = {}) {
   if (data) {
     const meta = document.createElement('div');
     meta.className = 'lab-chat-msg__meta';
-    meta.textContent = `${data.stopped_reason || 'done'} · ${data.iterations || 0} iter · ${data.tool_calls || 0} tools`;
+    meta.innerHTML = chatMetaHtml(data.stopped_reason || 'done', data.iterations || 0, data.tool_calls || 0);
     el.appendChild(meta);
   }
   els.messages.appendChild(el);
@@ -2659,27 +3141,89 @@ function codeBlockHtml(lang, code) {
   </div>`;
 }
 
-function localFilePathFromLink(anchor) {
+function localFileRefFromValue(value) {
+  let candidate = String(value || '').trim();
+  if (!candidate) return null;
+  try { candidate = decodeURIComponent(candidate); } catch (_e) {}
+  let hash = '';
+  if (/^https?:/i.test(candidate)) {
+    try {
+      const url = new URL(candidate);
+      hash = decodeURIComponent(url.hash || '');
+      candidate = decodeURIComponent(url.pathname || '');
+      if (/^\/[a-zA-Z]:[\\/]/.test(candidate)) candidate = candidate.slice(1);
+      else return null;
+    } catch (_e) {
+      return null;
+    }
+  } else if (/^file:/i.test(candidate)) {
+    try {
+      const url = new URL(candidate);
+      hash = decodeURIComponent(url.hash || '');
+      candidate = decodeURIComponent(url.pathname || '');
+    } catch (_e) {
+      const parts = candidate.replace(/^file:\/+/i, '').split('#');
+      candidate = parts.shift() || '';
+      hash = parts.length ? `#${parts.join('#')}` : '';
+    }
+    if (/^\/[a-zA-Z]:[\\/]/.test(candidate)) candidate = candidate.slice(1);
+  } else {
+    const hashMatch = candidate.match(/#L\d+(?:-L?\d+)?$/i);
+    if (hashMatch) {
+      hash = hashMatch[0];
+      candidate = candidate.slice(0, -hash.length);
+    }
+  }
+  const colonLine = candidate.match(/^([a-zA-Z]:[\\/].*?)(?::(\d+)(?:-(\d+))?)?$/);
+  if (colonLine?.[2]) {
+    candidate = colonLine[1];
+    hash = `#L${colonLine[2]}${colonLine[3] ? `-L${colonLine[3]}` : ''}`;
+  }
+  if (/^\/[a-zA-Z]:[\\/]/.test(candidate)) candidate = candidate.slice(1);
+  const isAbsoluteLocal = /^[a-zA-Z]:[\\/]/.test(candidate) || /^\\\\[^\\]+\\[^\\]+/.test(candidate);
+  const isRelativeLocal = !/^[a-zA-Z][a-zA-Z\d+.-]*:/i.test(candidate)
+    && !candidate.startsWith('#')
+    && !candidate.startsWith('//')
+    && /[\\/]/.test(candidate)
+    && /\.[a-z0-9]{1,12}$/i.test(candidate.split(/[?#]/, 1)[0] || '');
+  if (!isAbsoluteLocal && !isRelativeLocal) return null;
+  return {
+    path: candidate,
+    line: fileRefLineLabel(hash),
+    startLine: fileRefLines(hash).start,
+    endLine: fileRefLines(hash).end,
+    basename: candidate.split(/[\\/]/).filter(Boolean).pop() || candidate,
+  };
+}
+
+function localFileRefFromLink(anchor) {
   const values = [
     anchor.getAttribute('href') || '',
     anchor.textContent || '',
   ];
   for (const value of values) {
-    let candidate = String(value).trim();
-    if (!candidate) continue;
-    try { candidate = decodeURIComponent(candidate); } catch (_e) {}
-    if (/^file:/i.test(candidate)) {
-      try {
-        const url = new URL(candidate);
-        candidate = decodeURIComponent(url.pathname || '');
-      } catch (_e) {
-        candidate = candidate.replace(/^file:\/+/i, '');
-      }
-      if (/^\/[a-zA-Z]:[\\/]/.test(candidate)) candidate = candidate.slice(1);
-    }
-    if (/^[a-zA-Z]:[\\/]/.test(candidate) || /^\\\\[^\\]+\\[^\\]+/.test(candidate)) return candidate;
+    const ref = localFileRefFromValue(value);
+    if (ref) return ref;
   }
-  return '';
+  return null;
+}
+
+function fileRefLineLabel(hash) {
+  const match = String(hash || '').match(/^#L(\d+)(?:-L?(\d+))?$/i);
+  if (!match) return '';
+  return match[2] ? `L${match[1]}–L${match[2]}` : `L${match[1]}`;
+}
+
+function fileRefLines(hash) {
+  const match = String(hash || '').match(/^#L(\d+)(?:-L?(\d+))?$/i);
+  if (!match) return { start: 1, end: 80 };
+  const start = Number(match[1] || 1);
+  const end = Number(match[2] || start);
+  return { start, end };
+}
+
+function fileRefHtml(ref) {
+  return `<span class="lab-file-ref__icon">{}</span><span class="lab-file-ref__name" data-file-open="1">${esc(ref.basename)}</span>${ref.line ? `<span class="lab-file-ref__line" data-file-preview="1">${esc(ref.line)}</span>` : ''}`;
 }
 
 async function revealLocalFile(path) {
@@ -2692,6 +3236,51 @@ async function revealLocalFile(path) {
     });
   } catch (error) {
     flash(`Could not open file: ${error.message}`);
+  }
+}
+
+async function toggleFilePreview(trigger, ref) {
+  if (!trigger || !ref?.path) return;
+  const existing = trigger.nextElementSibling?.classList?.contains('lab-file-preview')
+    ? trigger.nextElementSibling
+    : null;
+  if (existing) {
+    existing.remove();
+    return;
+  }
+  const preview = document.createElement('section');
+  preview.className = 'lab-file-preview';
+  preview.innerHTML = `
+    <header class="lab-file-preview__head">
+      <span>${esc(ref.basename)}</span>
+      <span>${esc(ref.line || 'preview')}</span>
+    </header>
+    <div class="lab-file-preview__body">Loading preview…</div>
+  `;
+  trigger.insertAdjacentElement('afterend', preview);
+  try {
+    const pad = ref.line ? 2 : 0;
+    const data = await request('/api/files/snippet', {
+      method: 'POST',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({
+        path: ref.path,
+        start: Math.max(1, Number(ref.startLine || 1) - pad),
+        end: Math.max(Number(ref.endLine || ref.startLine || 80) + pad, Number(ref.startLine || 1)),
+      }),
+    });
+    const content = String(data.content || '');
+    const first = Number(data.start || ref.startLine || 1);
+    const numbered = content.split('\n').map((line, index) => `${String(first + index).padStart(4, ' ')} │ ${line}`).join('\n');
+    preview.innerHTML = `
+      <header class="lab-file-preview__head">
+        <span>${esc(ref.basename)}</span>
+        <span>${esc(`L${data.start}–L${data.end} of ${data.total_lines}`)}</span>
+      </header>
+      <pre class="lab-file-preview__code"><code>${esc(numbered || '(empty)')}</code></pre>
+    `;
+  } catch (error) {
+    preview.querySelector('.lab-file-preview__body').textContent = `Could not load preview: ${error.message || error}`;
   }
 }
 
@@ -2726,12 +3315,28 @@ function hydrateRenderedMarkdown(root) {
   // Make external links open in a new tab.
   root.querySelectorAll('a[href]').forEach((a) => {
     const href = a.getAttribute('href') || '';
-    const localPath = localFilePathFromLink(a);
-    if (localPath) {
-      a.dataset.localFilePath = localPath;
+    const localRef = localFileRefFromLink(a);
+    if (localRef) {
+      a.classList.add('lab-file-ref');
+      a.dataset.localFilePath = localRef.path;
+      a.removeAttribute('href');
+      a.setAttribute('role', 'button');
+      a.setAttribute('tabindex', '0');
+      a.setAttribute('title', localRef.path + (localRef.line ? ` · ${localRef.line}` : ''));
+      a.innerHTML = fileRefHtml(localRef);
       a.addEventListener('click', (event) => {
         event.preventDefault();
-        revealLocalFile(localPath);
+        if (event.target.closest('[data-file-preview]')) {
+          toggleFilePreview(a, localRef);
+          return;
+        }
+        revealLocalFile(localRef.path);
+      });
+      a.addEventListener('keydown', (event) => {
+        if (event.key !== 'Enter' && event.key !== ' ') return;
+        event.preventDefault();
+        if (localRef.line) toggleFilePreview(a, localRef);
+        else revealLocalFile(localRef.path);
       });
       return;
     }
@@ -2739,5 +3344,24 @@ function hydrateRenderedMarkdown(root) {
       a.setAttribute('target', '_blank');
       a.setAttribute('rel', 'noopener noreferrer');
     }
+  });
+  root.querySelectorAll('code').forEach((code) => {
+    if (code.closest('pre') || code.closest('a') || code.dataset.fileRefHydrated) return;
+    const ref = localFileRefFromValue(code.textContent || '');
+    if (!ref) return;
+    const btn = document.createElement('button');
+    btn.className = 'lab-file-ref lab-file-ref--inline-code';
+    btn.type = 'button';
+    btn.dataset.localFilePath = ref.path;
+    btn.title = ref.path + (ref.line ? ` · ${ref.line}` : '');
+    btn.innerHTML = fileRefHtml(ref);
+    btn.addEventListener('click', (event) => {
+      if (event.target.closest('[data-file-preview]')) {
+        toggleFilePreview(btn, ref);
+        return;
+      }
+      revealLocalFile(ref.path);
+    });
+    code.replaceWith(btn);
   });
 }
