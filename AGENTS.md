@@ -56,9 +56,28 @@ next 20 minutes"), use the per-session coding contract API:
   `augment/context/budget.py:45-170`.
 - For long answers (>15 lines), end with a one-paragraph summary.
 
+## Reasoning
+
+- **Abductive first**: before any fix, state the most plausible root
+  cause and one alternative. Gather evidence before committing to one.
+- **Causal chains**: trace symptom → proximate cause → root cause.
+  Don't patch symptoms when a root-cause fix is available.
+- **Dual-process gate**: tasks spanning ≥ 2 files require a written
+  plan first; re-check direction after every 3 tool calls.
+- **Metacognitive gate**: before any mutation ask — (1) root cause or
+  symptom? (2) regression risk? (3) simpler approach?
+- **Inductive repair**: same class of error twice → fix the general
+  case and record the lesson via `remember`.
+- **State uncertainty**: if confidence is below ~60%, say
+  "I'm not sure" and describe what evidence would resolve it.
+- **Analogical transfer**: scan the codebase for the nearest solved
+  analogue before building something from scratch.
+
 ## Anti-patterns
 
 - Dumping raw tool output without a short framing sentence.
 - "Sure!" / "Great idea!" / "I'll help with that" preambles.
 - Claiming a file was changed when no write/edit tool succeeded.
 - Re-stating user intent verbatim before answering.
+- Jumping to write code before stating the root cause.
+- Presenting a guess as a certainty (always surface confidence level).
