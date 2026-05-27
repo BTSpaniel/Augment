@@ -78,6 +78,13 @@
       <stop offset="100%" stop-color="#ff00aa" stop-opacity="0" />
     </radialGradient>
 
+    <radialGradient id="pulseAura" cx="50%" cy="48%" r="52%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.22" />
+      <stop offset="38%" stop-color="#00f3ff" stop-opacity="0.16" />
+      <stop offset="68%" stop-color="#7c3cff" stop-opacity="0.1" />
+      <stop offset="100%" stop-color="#ff00aa" stop-opacity="0" />
+    </radialGradient>
+
     <linearGradient id="nodeGlass" x1="0%" y1="0%" x2="100%" y2="100%">
       <stop offset="0%" stop-color="#ffffff" stop-opacity="0.58" />
       <stop offset="45%" stop-color="#00f3ff" stop-opacity="0.24" />
@@ -85,9 +92,38 @@
     </linearGradient>
 
     <style>
+      .background-pulse { animation: backgroundPulse 4.8s ease-in-out infinite; transform-origin: 500px 450px; }
+      .transformer-ring { animation: transformerOrbit 8.7s linear infinite; transform-origin: 500px 450px; }
+      .transformer-ring--reverse { animation: transformerOrbitReverse 11.3s linear infinite; transform-origin: 500px 450px; }
+      .phase-shard { animation: shardPhase 5.9s ease-in-out infinite; transform-origin: center; }
+      .scan-glitch { animation: scanGlitch 6.4s steps(1, end) infinite; }
       .electric-line { animation: pulse 2.6s ease-in-out infinite; }
       .spark { animation: twinkle 3.4s ease-in-out infinite; transform-origin: center; }
       .signal-node { animation: nodePulse 4.2s ease-in-out infinite; transform-origin: center; }
+      @keyframes backgroundPulse {
+        0%, 100% { opacity: 0.38; transform: scale(0.94) rotate(0deg); }
+        32% { opacity: 0.76; transform: scale(1.05) rotate(2deg); }
+        61% { opacity: 0.48; transform: scale(0.99) rotate(-1deg); }
+      }
+      @keyframes transformerOrbit {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+      }
+      @keyframes transformerOrbitReverse {
+        from { transform: rotate(360deg); }
+        to { transform: rotate(0deg); }
+      }
+      @keyframes shardPhase {
+        0%, 100% { opacity: 0.16; transform: scale(0.92) skewX(0deg); }
+        23% { opacity: 0.7; transform: scale(1.02) skewX(-7deg); }
+        57% { opacity: 0.36; transform: scale(0.98) skewX(5deg); }
+      }
+      @keyframes scanGlitch {
+        0%, 78%, 100% { opacity: 0; transform: translateX(0); }
+        80% { opacity: 0.88; transform: translateX(-18px); }
+        82% { opacity: 0.25; transform: translateX(14px); }
+        84% { opacity: 0.72; transform: translateX(0); }
+      }
       @keyframes pulse {
         0%, 100% { opacity: 0.76; stroke-width: 9; }
         50% { opacity: 1; stroke-width: 13; }
@@ -100,11 +136,44 @@
         0%, 100% { opacity: 0.58; transform: scale(0.96); }
         50% { opacity: 0.92; transform: scale(1.04); }
       }
+      @media (prefers-reduced-motion: reduce) {
+        .background-pulse,
+        .transformer-ring,
+        .transformer-ring--reverse,
+        .phase-shard,
+        .scan-glitch,
+        .electric-line,
+        .spark,
+        .signal-node { animation: none; }
+      }
     </style>
   </defs>
 
   <!-- Halo and outer signal rails -->
   <g transform="translate(0, -15)">
+    <g class="background-pulse" filter="url(#hotBloom)">
+      <circle cx="500" cy="450" r="420" fill="url(#pulseAura)" />
+      <circle cx="500" cy="450" r="320" fill="none" stroke="#00f3ff" stroke-width="6" stroke-dasharray="32 46 10 58" opacity="0.42" />
+      <circle cx="500" cy="450" r="245" fill="none" stroke="#ff00aa" stroke-width="5" stroke-dasharray="18 36 54 22" opacity="0.38" />
+    </g>
+    <g class="transformer-ring" fill="none" stroke-linecap="round" filter="url(#hotBloom)" opacity="0.84">
+      <path d="M 500,38 A 412,412 0 0 1 842,230" stroke="#00f3ff" stroke-width="7" stroke-dasharray="58 180" />
+      <path d="M 896,475 A 404,404 0 0 1 645,835" stroke="#ffffff" stroke-width="4" stroke-dasharray="24 164" />
+      <path d="M 360,830 A 392,392 0 0 1 104,478" stroke="#ff00aa" stroke-width="7" stroke-dasharray="48 170" />
+    </g>
+    <g class="transformer-ring--reverse" fill="none" stroke-linecap="round" filter="url(#neonCyan)" opacity="0.54">
+      <path d="M 230,150 A 382,382 0 0 1 775,142" stroke="#8fffff" stroke-width="4" stroke-dasharray="14 92 44 126" />
+      <path d="M 822,730 A 376,376 0 0 1 188,720" stroke="#ff8be8" stroke-width="4" stroke-dasharray="34 118 12 96" />
+    </g>
+    <g class="phase-shard" opacity="0.46">
+      <polygon points="180,280 252,242 236,322" fill="#00f3ff" filter="url(#neonCyan)" />
+      <polygon points="820,282 748,244 764,324" fill="#ff00aa" filter="url(#neonMagenta)" />
+      <polygon points="500,850 538,782 462,782" fill="#ffffff" filter="url(#hotBloom)" />
+    </g>
+    <g class="scan-glitch" fill="none" stroke-linecap="round" filter="url(#hotBloom)">
+      <path d="M 280,315 H 720" stroke="#00f3ff" stroke-width="8" opacity="0.58" />
+      <path d="M 335,670 H 665" stroke="#ff00aa" stroke-width="7" opacity="0.5" />
+    </g>
     <circle cx="500" cy="450" r="410" fill="url(#coreGlow)" opacity="0.88" />
     
     <polygon points="500,70 880,790 730,790 500,310 270,790 120,790" fill="#000000" opacity="0.5" filter="url(#neonCyan)" />
