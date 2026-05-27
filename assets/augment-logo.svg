@@ -1,76 +1,204 @@
-<svg width="1200" height="360" viewBox="0 0 1200 360" fill="none" xmlns="http://www.w3.org/2000/svg" role="img" aria-labelledby="title desc">
-  <title id="title">Augment futuristic neon logo</title>
-  <desc id="desc">A luminous hexagonal neural core beside the word Augment, rendered with cyan and magenta futuristic gradients.</desc>
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 1000 1000" width="100%" height="100%">
   <defs>
-    <radialGradient id="bgGlow" cx="50%" cy="50%" r="58%">
-      <stop offset="0%" stop-color="#22D3EE" stop-opacity="0.22"/>
-      <stop offset="44%" stop-color="#A855F7" stop-opacity="0.14"/>
-      <stop offset="100%" stop-color="#050816" stop-opacity="0"/>
+    <radialGradient id="bgGlow" cx="50%" cy="45%" r="65%">
+      <stop offset="0%" stop-color="#111625" />
+      <stop offset="60%" stop-color="#040609" />
+      <stop offset="100%" stop-color="#000000" />
     </radialGradient>
-    <linearGradient id="markStroke" x1="94" y1="48" x2="286" y2="300" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#67E8F9"/>
-      <stop offset="45%" stop-color="#A78BFA"/>
-      <stop offset="100%" stop-color="#F472B6"/>
-    </linearGradient>
-    <linearGradient id="wordGradient" x1="360" y1="78" x2="1030" y2="278" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#F8FAFC"/>
-      <stop offset="42%" stop-color="#A5F3FC"/>
-      <stop offset="72%" stop-color="#C4B5FD"/>
-      <stop offset="100%" stop-color="#F9A8D4"/>
-    </linearGradient>
-    <linearGradient id="scanline" x1="0" y1="0" x2="1200" y2="0" gradientUnits="userSpaceOnUse">
-      <stop offset="0%" stop-color="#22D3EE" stop-opacity="0"/>
-      <stop offset="50%" stop-color="#22D3EE" stop-opacity="0.52"/>
-      <stop offset="100%" stop-color="#22D3EE" stop-opacity="0"/>
-    </linearGradient>
-    <filter id="neon" x="-60" y="-60" width="1320" height="480" filterUnits="userSpaceOnUse" color-interpolation-filters="sRGB">
-      <feGaussianBlur stdDeviation="5" result="blurA"/>
-      <feGaussianBlur stdDeviation="14" result="blurB"/>
+
+    <radialGradient id="floorShadow" cx="50%" cy="50%" r="50%">
+      <stop offset="0%" stop-color="#000000" stop-opacity="0.9" />
+      <stop offset="70%" stop-color="#000000" stop-opacity="0.3" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+
+    <filter id="neonCyan" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="tight" />
+      <feGaussianBlur stdDeviation="20" result="wide" />
       <feMerge>
-        <feMergeNode in="blurB"/>
-        <feMergeNode in="blurA"/>
-        <feMergeNode in="SourceGraphic"/>
+        <feMergeNode in="wide" />
+        <feMergeNode in="tight" />
+        <feMergeNode in="SourceGraphic" />
       </feMerge>
     </filter>
-    <filter id="softShadow" x="-20%" y="-20%" width="140%" height="140%" color-interpolation-filters="sRGB">
-      <feDropShadow dx="0" dy="18" stdDeviation="24" flood-color="#000000" flood-opacity="0.46"/>
+
+    <filter id="neonMagenta" x="-50%" y="-50%" width="200%" height="200%">
+      <feGaussianBlur stdDeviation="4" result="tight" />
+      <feGaussianBlur stdDeviation="20" result="wide" />
+      <feMerge>
+        <feMergeNode in="wide" />
+        <feMergeNode in="tight" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
     </filter>
-    <pattern id="grid" width="42" height="42" patternUnits="userSpaceOnUse">
-      <path d="M42 0H0V42" stroke="#94A3B8" stroke-opacity="0.08" stroke-width="1"/>
+
+    <linearGradient id="metalLeft" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#1a1e29" />
+      <stop offset="40%" stop-color="#2d3547" />
+      <stop offset="70%" stop-color="#44506b" />
+      <stop offset="100%" stop-color="#141721" />
+    </linearGradient>
+
+    <linearGradient id="metalRight" x1="0%" y1="0%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#11131a" />
+      <stop offset="30%" stop-color="#242a38" />
+      <stop offset="60%" stop-color="#374154" />
+      <stop offset="100%" stop-color="#1b1f29" />
+    </linearGradient>
+
+    <linearGradient id="darkBase" x1="0%" y1="0%" x2="0%" y2="100%">
+      <stop offset="0%" stop-color="#0e1117" />
+      <stop offset="100%" stop-color="#040507" />
+    </linearGradient>
+
+    <linearGradient id="cyanCore" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#003cd2" />
+      <stop offset="60%" stop-color="#00f3ff" />
+      <stop offset="100%" stop-color="#ffffff" />
+    </linearGradient>
+
+    <linearGradient id="magentaCore" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#7700ee" />
+      <stop offset="60%" stop-color="#ff00aa" />
+      <stop offset="100%" stop-color="#ffffff" />
+    </linearGradient>
+
+    <linearGradient id="prismEdge" x1="0%" y1="100%" x2="100%" y2="0%">
+      <stop offset="0%" stop-color="#00f3ff" />
+      <stop offset="34%" stop-color="#ffffff" />
+      <stop offset="66%" stop-color="#ff00aa" />
+      <stop offset="100%" stop-color="#ffd166" />
+    </linearGradient>
+
+    <radialGradient id="hotCore" cx="50%" cy="42%" r="48%">
+      <stop offset="0%" stop-color="#ffffff" stop-opacity="0.95" />
+      <stop offset="35%" stop-color="#ff47d7" stop-opacity="0.38" />
+      <stop offset="68%" stop-color="#00f3ff" stop-opacity="0.18" />
+      <stop offset="100%" stop-color="#000000" stop-opacity="0" />
+    </radialGradient>
+
+    <pattern id="starGrid" width="72" height="72" patternUnits="userSpaceOnUse">
+      <path d="M 72 0 L 0 0 0 72" fill="none" stroke="#ffffff" stroke-opacity="0.035" stroke-width="1" />
+      <circle cx="12" cy="18" r="1.4" fill="#00f3ff" opacity="0.45" />
+      <circle cx="54" cy="46" r="1.1" fill="#ff00aa" opacity="0.4" />
     </pattern>
+
+    <filter id="hotBloom" x="-70%" y="-70%" width="240%" height="240%">
+      <feGaussianBlur stdDeviation="8" result="tight" />
+      <feGaussianBlur stdDeviation="32" result="wide" />
+      <feColorMatrix in="wide" type="matrix" values="1 0 0 0 0.12  0 1 0 0 0.04  0 0 1 0 0.28  0 0 0 1.2 0" result="tinted" />
+      <feMerge>
+        <feMergeNode in="tinted" />
+        <feMergeNode in="tight" />
+        <feMergeNode in="SourceGraphic" />
+      </feMerge>
+    </filter>
+
+    <style>
+      .energy-ring { animation: breathe 4.8s ease-in-out infinite; transform-origin: 500px 500px; }
+      .electric-line { animation: pulse 2.6s ease-in-out infinite; }
+      .spark { animation: twinkle 3.4s ease-in-out infinite; transform-origin: center; }
+      @keyframes breathe {
+        0%, 100% { opacity: 0.22; transform: scale(0.98); }
+        50% { opacity: 0.52; transform: scale(1.04); }
+      }
+      @keyframes pulse {
+        0%, 100% { opacity: 0.76; stroke-width: 9; }
+        50% { opacity: 1; stroke-width: 13; }
+      }
+      @keyframes twinkle {
+        0%, 100% { opacity: 0.28; transform: scale(0.75); }
+        50% { opacity: 1; transform: scale(1.2); }
+      }
+    </style>
   </defs>
 
-  <rect width="1200" height="360" rx="34" fill="#050816"/>
-  <rect width="1200" height="360" rx="34" fill="url(#grid)"/>
-  <ellipse cx="223" cy="180" rx="244" ry="206" fill="url(#bgGlow)"/>
-  <ellipse cx="832" cy="180" rx="438" ry="166" fill="#A855F7" fill-opacity="0.045"/>
+  <rect width="1000" height="1000" fill="url(#bgGlow)" />
+  <rect width="1000" height="1000" fill="url(#starGrid)" opacity="0.8" />
+  <circle class="energy-ring" cx="500" cy="465" r="370" fill="none" stroke="url(#prismEdge)" stroke-width="2" opacity="0.32" filter="url(#hotBloom)" />
+  <circle class="energy-ring" cx="500" cy="465" r="285" fill="none" stroke="#ffffff" stroke-width="1" opacity="0.18" />
+  <ellipse cx="500" cy="430" rx="360" ry="275" fill="url(#hotCore)" opacity="0.62" />
 
-  <g filter="url(#softShadow)">
-    <path d="M190 42L307 111V249L190 318L73 249V111L190 42Z" fill="#0B1020" fill-opacity="0.88" stroke="url(#markStroke)" stroke-width="5"/>
-    <path d="M190 78L276 129V231L190 282L104 231V129L190 78Z" stroke="url(#markStroke)" stroke-width="3" stroke-opacity="0.72"/>
-    <path d="M190 114L245 147V213L190 246L135 213V147L190 114Z" fill="#111827" stroke="url(#markStroke)" stroke-width="3"/>
+  <ellipse cx="500" cy="840" rx="430" ry="40" fill="url(#floorShadow)" opacity="0.85" />
+  
+  <g transform="translate(0, 1610) scale(1, -0.9)" opacity="0.12">
+    <polygon points="500,90 870,790 730,790 500,320 270,790 130,790" fill="#000000" />
+    <path d="M 485,110 L 250,560 L 140,780" fill="none" stroke="#00f3ff" stroke-width="14" filter="url(#neonCyan)" />
+    <path d="M 515,110 L 750,560 L 860,780" fill="none" stroke="#ff00aa" stroke-width="14" filter="url(#neonMagenta)" />
   </g>
+  <rect x="0" y="790" width="1000" height="210" fill="#000000" opacity="0.45" />
 
-  <g filter="url(#neon)">
-    <circle cx="190" cy="180" r="20" fill="#E0F2FE"/>
-    <circle cx="190" cy="180" r="9" fill="#22D3EE"/>
-    <circle cx="139" cy="148" r="7" fill="#67E8F9"/>
-    <circle cx="241" cy="148" r="7" fill="#A78BFA"/>
-    <circle cx="139" cy="212" r="7" fill="#F472B6"/>
-    <circle cx="241" cy="212" r="7" fill="#67E8F9"/>
-    <path d="M190 180L139 148M190 180L241 148M190 180L139 212M190 180L241 212" stroke="url(#markStroke)" stroke-width="3" stroke-linecap="round"/>
-    <path d="M139 148L241 148L241 212L139 212L139 148Z" stroke="url(#markStroke)" stroke-width="2" stroke-opacity="0.52"/>
+  <g transform="translate(0, -15)">
+    
+    <polygon points="500,70 880,790 730,790 500,310 270,790 120,790" fill="#000000" opacity="0.5" filter="url(#neonCyan)" />
+    <polygon points="500,60 895,795 725,795 500,300 275,795 105,795" fill="none" stroke="url(#prismEdge)" stroke-width="5" opacity="0.55" filter="url(#hotBloom)" />
+
+    <polygon points="500,70 880,790 730,790 500,310 270,790 120,790" fill="#0c0e14" stroke="#232a3a" stroke-width="2" />
+
+    <polygon points="500,90 500,320 270,790 130,790" fill="url(#darkBase)" />
+    <polygon points="480,130 420,250 240,610 165,765 245,765 415,435" fill="url(#metalLeft)" />
+    <polygon points="415,435 245,765 220,765 390,435" fill="#59688c" opacity="0.35" />
+
+    <polygon points="500,90 500,320 730,790 870,790" fill="url(#darkBase)" />
+    <polygon points="520,130 580,250 760,610 835,765 755,765 585,435" fill="url(#metalRight)" />
+    <polygon points="585,435 755,765 780,765 610,435" fill="#191d26" opacity="0.75" />
+
+    <polygon points="500,320 660,640 340,640" fill="#020305" />
+    <polygon points="500,345 635,615 365,615" fill="#06080c" />
+
+    <polygon points="292,575 708,575 718,590 282,590" fill="#495573" />
+    <polygon points="282,590 718,590 680,655 320,655" fill="url(#darkBase)" stroke="#000000" stroke-width="3" />
+    <polygon points="340,605 660,605 645,635 355,635" fill="#010204" />
+    
+    <rect x="375" y="614" width="90" height="7" rx="3" fill="#00f3ff" opacity="0.65" filter="url(#neonCyan)" />
+    <rect x="535" y="614" width="90" height="7" rx="3" fill="#ff00aa" opacity="0.65" filter="url(#neonMagenta)" />
+
+    <polygon points="230,510 295,420 315,490" fill="#151921" stroke="#293042" stroke-width="1.5" />
+    <polygon points="230,510 200,560 275,540" fill="#323b50" />
+    <polygon points="770,510 705,420 685,490" fill="#0b0d12" stroke="#1c202b" stroke-width="1.5" />
+    <polygon points="770,510 800,560 725,540" fill="#1c202b" />
+
+    <polygon points="425,135 575,135 545,190 455,190" fill="#11141e" stroke="#323b50" stroke-width="1.5" />
+    <polygon points="435,145 565,145 545,180 455,180" fill="#040507" />
+    <line x1="440" y1="160" x2="475" y2="160" stroke="#00f3ff" stroke-width="3.5" stroke-linecap="round" filter="url(#neonCyan)" />
+    <line x1="560" y1="160" x2="525" y2="160" stroke="#ff00aa" stroke-width="3.5" stroke-linecap="round" filter="url(#neonMagenta)" />
+
+    <path class="electric-line" d="M 485,105 L 248,555 L 143,765" fill="none" stroke="url(#cyanCore)" stroke-width="11" stroke-linecap="round" filter="url(#neonCyan)" />
+    <path d="M 485,105 L 248,555 L 143,765" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.9" />
+    <path d="M 468,150 L 307,455 L 178,718" fill="none" stroke="#8fffff" stroke-width="4" stroke-linecap="round" opacity="0.62" filter="url(#hotBloom)" />
+
+    <path class="electric-line" d="M 515,105 L 752,555 L 857,765" fill="none" stroke="url(#magentaCore)" stroke-width="11" stroke-linecap="round" filter="url(#neonMagenta)" />
+    <path d="M 515,105 L 752,555 L 857,765" fill="none" stroke="#ffffff" stroke-width="2.5" stroke-linecap="round" opacity="0.9" />
+    <path d="M 532,150 L 693,455 L 822,718" fill="none" stroke="#ff8be8" stroke-width="4" stroke-linecap="round" opacity="0.62" filter="url(#hotBloom)" />
+
+    <g filter="url(#neonMagenta)">
+      <polygon points="500,410 565,530 500,495 435,530" fill="#ff21cc" />
+      <polygon points="500,410 500,495 435,530" fill="#ffffff" opacity="0.4" />
+      <polygon points="500,410 565,530 500,495" fill="#1b0021" opacity="0.4" />
+    </g>
+    <polygon points="500,425 545,510 500,485 455,510" fill="#ffffff" opacity="0.8" />
+
+    <g filter="url(#neonCyan)">
+      <polygon points="500,15 530,75 470,75" fill="#00f3ff" />
+      <polygon points="500,15 500,75 470,75" fill="#ffffff" opacity="0.55" />
+    </g>
+    <polygon points="500,30 515,70 485,70" fill="#ffffff" opacity="0.85" />
+    <circle class="spark" cx="500" cy="18" r="8" fill="#ffffff" filter="url(#hotBloom)" />
+    <circle class="spark" cx="382" cy="286" r="4" fill="#00f3ff" filter="url(#neonCyan)" />
+    <circle class="spark" cx="618" cy="286" r="4" fill="#ff00aa" filter="url(#neonMagenta)" />
+    <circle class="spark" cx="304" cy="690" r="3.5" fill="#ffffff" filter="url(#hotBloom)" />
+    <circle class="spark" cx="696" cy="690" r="3.5" fill="#ffffff" filter="url(#hotBloom)" />
+
+    <g fill="none" stroke="#00f3ff" stroke-width="3" stroke-linecap="round" filter="url(#neonCyan)">
+      <path d="M 205,715 L 145,775 M 235,735 L 185,785" />
+      <circle cx="145" cy="775" r="4.5" fill="#ffffff" />
+      <circle cx="185" cy="785" r="4.5" fill="#ffffff" />
+    </g>
+
+    <g fill="none" stroke="#ff00aa" stroke-width="3" stroke-linecap="round" filter="url(#neonMagenta)">
+      <path d="M 795,715 L 855,775 M 765,735 L 815,785" />
+      <circle cx="855" cy="775" r="4.5" fill="#ffffff" />
+      <circle cx="815" cy="785" r="4.5" fill="#ffffff" />
+    </g>
   </g>
-
-  <g filter="url(#neon)">
-    <path d="M364 255L455 82H500L592 255H540L525 223H429L414 255H364ZM447 184H507L477 119L447 184Z" fill="url(#wordGradient)"/>
-    <path d="M612 255V82H661V214H748V255H612Z" fill="url(#wordGradient)"/>
-    <path d="M773 255V82H823L904 177V82H952V255H911L821 150V255H773Z" fill="url(#wordGradient)"/>
-    <path d="M984 255V82H1117V123H1033V149H1109V188H1033V214H1122V255H984Z" fill="url(#wordGradient)"/>
-  </g>
-
-  <path d="M358 284H1125" stroke="url(#scanline)" stroke-width="2" stroke-linecap="round"/>
-  <text x="364" y="311" fill="#94A3B8" font-family="Inter, Segoe UI, Arial, sans-serif" font-size="22" letter-spacing="8">LOCAL AGENTIC WORKSPACE</text>
-  <path d="M56 328H1144" stroke="#22D3EE" stroke-opacity="0.18" stroke-width="1"/>
-  <path d="M56 32H1144" stroke="#F472B6" stroke-opacity="0.14" stroke-width="1"/>
 </svg>
