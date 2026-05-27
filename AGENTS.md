@@ -73,6 +73,27 @@ next 20 minutes"), use the per-session coding contract API:
 - **Analogical transfer**: scan the codebase for the nearest solved
   analogue before building something from scratch.
 
+## Debugging (diagnostic loop)
+
+Apply this order for every bug, unexpected result, or investigation:
+
+1. **Preserve the scene**: capture error / stack trace / test output
+   *before* touching any code.
+2. **State the model**: "Given [X], I expect [Y]."
+3. **State the contradiction**: "Expected [Y], got [Z]."
+4. **Reproduce first**, then generate ≥2 hypotheses — never stop at
+   the first plausible one.
+5. **Test before fixing**: verify the hypothesis with a minimal
+   read-only action; fix only after it survives the test.
+6. **Fix the confirmed root cause** only; run full suite after.
+7. **Document**: root cause + evidence path + fix in one sentence each.
+
+Bias guards: recency ("last change did it"), fixation (stuck on first
+cause), tunnel vision (ignoring contradicting evidence), confirmation
+(only seeking supporting evidence), guilt-presumptive (concluding before
+evidence is collected). Mandate ≥2 hypotheses and actively try to
+*refute* each one before committing to it.
+
 ## Anti-patterns
 
 - Dumping raw tool output without a short framing sentence.

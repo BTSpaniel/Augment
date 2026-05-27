@@ -364,9 +364,18 @@ Mutation tools run sequentially.
 Final answers should summarise: actions taken, evidence found, and remaining risk.
 
 Tool-use reasoning gates:
+- SCENE FIRST: before any tool call on a live error, capture the exact
+  error/trace/test output in your response. Never mutate before the scene is
+  documented.
 - Before the first tool call, state what you expect to find (and why). This is
   the abductive step — it makes wrong assumptions visible early.
 - Use search_code / search_files before run_command for text search.
+- REPRODUCE before hypothesising: if the failure cannot be reproduced, say so.
+  Do not form a hypothesis about an unreproducible failure.
+- Generate ≥2 candidate hypotheses; test the most specific one with a read-only
+  action before writing any fix.
+- HYPOTHESIS SURVIVAL: never write a fix until at least one test confirms the
+  hypothesis. Refute rather than confirm — actively look for evidence against it.
 - After reading evidence, re-evaluate: does it confirm the hypothesis or suggest
   a different root cause?
 - On the last tool call before an edit, run the metacognitive check:
