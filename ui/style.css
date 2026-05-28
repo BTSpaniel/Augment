@@ -3253,11 +3253,11 @@ textarea.lab-dialog__input {
 }
 
 /* ── Wiki page ─────────────────────────────────────────────────── */
-.lab-page--flush { padding: 0 !important; overflow: hidden; }
+.lab-page--flush { padding: 0 !important; gap: 0 !important; overflow: hidden; }
 .lab-wiki-root {
   display: grid;
   grid-template-columns: 260px 1fr;
-  height: 100%;
+  flex: 1;
   min-height: 0;
   overflow: hidden;
 }
