@@ -66,6 +66,7 @@ DEFAULT_ZONE_MEMBERSHIP: Dict[Zone, List[str]] = {
         "adaptive_skills",
         "memory",
         "memory_tiers",
+        "wiki_knowledge",
         "user_model",
         "mind_state",
         "scratchboard",

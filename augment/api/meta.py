@@ -53,6 +53,12 @@ class RevealFileBody(BaseModel):
     path: str = ""
 
 
+class WikiWriteBody(BaseModel):
+    name: str
+    content: str
+    source: str = "api"
+
+
 class FileSnippetBody(BaseModel):
     path: str = ""
     start: int = 1
@@ -1043,3 +1049,71 @@ async def audit_replay(
         correlation_id=correlation_id,
         limit=limit,
     )
+
+
+# ── Wiki knowledge base ────────────────────────────────────────────────
+
+
+@router.get("/wiki/pages")
+async def wiki_list(request: Request, subdir: str = "") -> dict[str, Any]:
+    """List all wiki pages (markdown knowledge base)."""
+    pages = request.app.state.augment.wiki_list(subdir=subdir)
+    return {"pages": pages, "count": len(pages)}
+
+
+@router.get("/wiki/search")
+async def wiki_search(
+    request: Request,
+    q: str = "",
+    max_results: int = 6,
+) -> dict[str, Any]:
+    """Keyword search across wiki page names and content."""
+    if not q:
+        raise HTTPException(status_code=400, detail="q is required")
+    results = request.app.state.augment.wiki_search(q, max_results=max_results)
+    return {"query": q, "results": results, "count": len(results)}
+
+
+@router.get("/wiki/page")
+async def wiki_read(request: Request, name: str = "") -> dict[str, Any]:
+    """Read a wiki page by name (e.g. 'decisions/AuthDesign')."""
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+    result = request.app.state.augment.wiki_read(name)
+    if "error" in result:
+        raise HTTPException(status_code=404, detail=result["error"])
+    return result
+
+
+@router.post("/wiki/page")
+async def wiki_write(request: Request, body: WikiWriteBody) -> dict[str, Any]:
+    """Create or update a wiki page."""
+    if not body.name or not body.content:
+        raise HTTPException(status_code=400, detail="name and content required")
+    return request.app.state.augment.wiki_write(body.name, body.content, source=body.source)
+
+
+@router.delete("/wiki/page")
+async def wiki_delete(request: Request, name: str = "") -> dict[str, Any]:
+    """Delete a wiki page by name."""
+    if not name:
+        raise HTTPException(status_code=400, detail="name is required")
+    return request.app.state.augment.wiki_delete(name)
+
+
+@router.get("/wiki/health")
+async def wiki_health(request: Request) -> dict[str, Any]:
+    """Wiki health check: broken links, orphans, pages without summary."""
+    return request.app.state.augment.wiki_health()
+
+
+@router.get("/wiki/stats")
+async def wiki_stats(request: Request) -> dict[str, Any]:
+    """Wiki statistics: total pages, index/log status."""
+    return request.app.state.augment.wiki_stats()
+
+
+@router.post("/wiki/consolidate")
+async def wiki_consolidate(request: Request) -> dict[str, Any]:
+    """Promote memory tiers (semantic/procedural/episodic) into wiki pages."""
+    return request.app.state.augment.wiki_consolidate()

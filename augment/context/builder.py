@@ -108,6 +108,7 @@ class ContextBuilder:
         coding_contract: str = "",
         evidence: str = "",
         learning_signals: str = "",
+        wiki_knowledge: str = "",
     ) -> str:
         # ── 1) Collect raw section content ───────────────────────────
         raw_sections: dict[str, str] = {
@@ -122,6 +123,7 @@ class ContextBuilder:
             "adaptive_skills":  skills_context,
             "memory":           self._memory.context_block(),
             "memory_tiers":     memory_tiers,
+            "wiki_knowledge":   wiki_knowledge,
             "user_model":       user_model,
             "mind_state":       mind_context,
             "runtime":          self._runtime(),

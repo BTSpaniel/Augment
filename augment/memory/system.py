@@ -5,6 +5,7 @@ import logging
 from pathlib import Path
 from typing import Any, Dict, Optional
 
+from augment.knowledge.wiki import WikiManager
 from augment.memory.consolidation import MemoryConsolidator
 from augment.memory.episodic import EpisodicMemory
 from augment.memory.procedural import ProceduralMemory
@@ -26,12 +27,13 @@ class MemorySystem:
         self.episodic = EpisodicMemory(self._data_dir)
         self.semantic = SemanticMemory(self._data_dir)
         self.procedural = ProceduralMemory(self._data_dir)
+        self.wiki = WikiManager(self._data_dir / "wiki")
 
         self.consolidator = MemoryConsolidator(
             self.working, self.episodic, self.semantic, self.procedural,
         )
         self.retriever = MemoryRetriever(
-            self.working, self.episodic, self.semantic, self.procedural,
+            self.working, self.episodic, self.semantic, self.procedural, self.wiki,
         )
 
         logger.debug(
@@ -41,7 +43,7 @@ class MemorySystem:
         )
 
     def context_block(self, query: str = "", *, max_chars: int = 2000) -> str:
-        """Combined memory block for prompt injection."""
+        """Combined memory + wiki block for prompt injection."""
         parts = []
         wm_block = self.working.as_context_block()
         if wm_block:
@@ -57,6 +59,11 @@ class MemorySystem:
             if ep_block:
                 parts.append(ep_block)
         return "\n\n".join(parts) if parts else ""
+
+    def wiki_context_block(self, query: str = "", *, max_chars: int = 3000) -> str:
+        """Wiki-only context block for prompt injection (separate zone)."""
+        block = self.wiki.context_block(query, max_results=3, per_page_chars=1200)
+        return block[:max_chars] if block else ""
 
     def snapshot(self) -> Dict[str, Any]:
         return {

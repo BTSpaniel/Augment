@@ -62,6 +62,7 @@ DEFAULT_SLOTS: Dict[str, tuple[float, float, float]] = {
     "adaptive_skills":  (4.0,  0.0, 10.0),   # skill packs
     "memory":           (4.0,  1.0,  8.0),   # MemoryStore episodic block
     "memory_tiers":     (4.0,  1.0, 10.0),   # MemorySystem semantic dump
+    "wiki_knowledge":   (3.0,  0.0,  8.0),   # WikiManager context block
     "user_model":       (2.0,  0.0,  4.0),
     "mind_state":       (2.0,  0.0,  4.0),
     "runtime":          (1.0,  0.0,  2.0),

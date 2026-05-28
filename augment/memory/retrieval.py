@@ -2,7 +2,7 @@
 from __future__ import annotations
 
 import logging
-from typing import Any, Dict, List
+from typing import Any, Dict, List, Optional
 
 from augment.memory.episodic import EpisodicMemory
 from augment.memory.procedural import ProceduralMemory
@@ -26,11 +26,13 @@ class MemoryRetriever:
         episodic: EpisodicMemory,
         semantic: SemanticMemory,
         procedural: ProceduralMemory,
+        wiki: "Optional[Any]" = None,
     ) -> None:
         self._working = working
         self._episodic = episodic
         self._semantic = semantic
         self._procedural = procedural
+        self._wiki = wiki
 
     def retrieve(self, query: str, *, limit: int = 10) -> List[Dict[str, Any]]:
         needle = str(query or "").lower()
@@ -72,6 +74,19 @@ class MemoryRetriever:
                 "content": steps[:300],
                 "score": float(proc.get("success_rate", 0.5)) * 0.7,
             })
+
+        # Wiki pages (durable knowledge, medium confidence)
+        if self._wiki:
+            try:
+                for page in self._wiki.search(query, max_results=min(3, limit)):
+                    results.append({
+                        "tier": "wiki",
+                        "key": page.name,
+                        "content": page.body()[:300],
+                        "score": 0.65,
+                    })
+            except Exception:
+                pass
 
         results.sort(key=lambda r: -float(r.get("score", 0)))
         return results[: max(1, limit)]

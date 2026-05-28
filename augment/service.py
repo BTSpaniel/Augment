@@ -193,6 +193,7 @@ class AugmentApp:
         mind_context = self.mind.context_block(max_chars=1200)
         plan_context = self.plans.context_block(sid, max_chars=5000)
         memory_context = self.memory_system.context_block(query=message, max_chars=2000)
+        wiki_context = self.memory_system.wiki_context_block(message, max_chars=3000)
         scratchboard_context = self.scratchboards.context_block(sid, max_chars=3000)
         turn_state_context = self.turn_states.context_block(sid, max_chars=2000)
         user_model_context = self.user_model.context_block(max_chars=1800)
@@ -232,6 +233,7 @@ class AugmentApp:
             coding_contract=coding_contract_block,
             evidence=evidence_context,
             learning_signals=learning_signals_context,
+            wiki_knowledge=wiki_context,
         )
         # Emit the assembled-context snapshot so the UI can render a
         # "bleep" expandable panel in the thinking bubble — same idea as
@@ -389,6 +391,14 @@ class AugmentApp:
                 outcome="success" if success_outcome else "error",
                 tools_used=list(tools_used) or None,
             )
+        except Exception:
+            pass
+        # Periodically consolidate memory tiers → wiki pages (every ~10 turns).
+        try:
+            from augment.knowledge.consolidation import consolidate_memory_to_wiki
+            import random
+            if random.random() < 0.10:
+                consolidate_memory_to_wiki(self.memory_system)
         except Exception:
             pass
         scratchpad_items = result.scratchpad.to_list()
@@ -745,6 +755,39 @@ class AugmentApp:
             outcome=outcome,
         )
         return self.memory_snapshot()
+
+    # ── Wiki knowledge base ─────────────────────────────────────────
+
+    def wiki_list(self, subdir: str = "") -> list[dict[str, Any]]:
+        return self.memory_system.wiki.all_pages_as_json()
+
+    def wiki_search(self, query: str, *, max_results: int = 6) -> list[dict[str, Any]]:
+        pages = self.memory_system.wiki.search(query, max_results=max_results)
+        return [p.to_dict(self.memory_system.wiki.root, include_content=True) for p in pages]
+
+    def wiki_read(self, name: str) -> dict[str, Any]:
+        content = self.memory_system.wiki.read_page(name)
+        if content is None:
+            return {"error": f"page not found: {name}"}
+        return {"name": name, "content": content}
+
+    def wiki_write(self, name: str, content: str, *, source: str = "api") -> dict[str, Any]:
+        page = self.memory_system.wiki.write_page(name, content, source=source)
+        return page.to_dict(self.memory_system.wiki.root)
+
+    def wiki_delete(self, name: str) -> dict[str, Any]:
+        ok = self.memory_system.wiki.delete_page(name)
+        return {"deleted": ok, "name": name}
+
+    def wiki_health(self) -> dict[str, Any]:
+        return self.memory_system.wiki.health()
+
+    def wiki_stats(self) -> dict[str, Any]:
+        return self.memory_system.wiki.stats()
+
+    def wiki_consolidate(self) -> dict[str, Any]:
+        from augment.knowledge.consolidation import consolidate_memory_to_wiki
+        return consolidate_memory_to_wiki(self.memory_system)
 
     # ── Sessions by project ─────────────────────────────────────────
     def list_sessions_by_project(self, *, limit: int = 200) -> dict[str, Any]:
