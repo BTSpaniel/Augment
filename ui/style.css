@@ -3416,13 +3416,21 @@ textarea.lab-dialog__input {
   font-family: var(--font-mono, monospace);
 }
 
-/* Panes */
-.lab-wiki-pane {
+/* Single content area — toolbar + one pane fills all remaining height */
+.lab-wiki-content {
   flex: 1;
+  position: relative;
+  min-height: 0;
+  overflow: hidden;
+}
+
+/* Panes — each fills the content area absolutely so they share the same space */
+.lab-wiki-pane {
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   overflow: hidden;
-  min-height: 0;
 }
 .lab-wiki-editor__content {
   flex: 1;
@@ -3454,9 +3462,10 @@ textarea.lab-dialog__input {
 .lab-wiki-preview table { border-collapse: collapse; width: 100%; }
 .lab-wiki-preview td, .lab-wiki-preview th { border: 1px solid var(--border); padding: 6px 10px; }
 
-/* Empty state */
+/* Empty state — same absolute stacking as panes */
 .lab-wiki-empty {
-  flex: 1;
+  position: absolute;
+  inset: 0;
   display: flex;
   flex-direction: column;
   align-items: center;
@@ -3467,6 +3476,13 @@ textarea.lab-dialog__input {
 .lab-wiki-empty__icon { font-size: 3rem; }
 .lab-wiki-empty h3 { font-size: 1.1rem; color: var(--fg-1); margin: 0; }
 .lab-wiki-empty p { margin: 0; font-size: 0.86rem; }
+
+/* Override: any [hidden] element inside the wiki must be invisible regardless
+   of display:flex/grid rules above — specificity fix */
+.lab-wiki-pane[hidden],
+.lab-wiki-empty[hidden],
+.lab-wiki-toolbar[hidden],
+.lab-wiki-health[hidden] { display: none !important; }
 
 /* Health panel */
 .lab-wiki-health {

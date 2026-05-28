@@ -193,25 +193,28 @@
               </div>
             </div>
 
-            <!-- Edit pane -->
-            <div id="wiki-edit-pane" class="lab-wiki-pane" hidden>
-              <textarea id="wiki-editor-content" class="lab-wiki-editor__content" placeholder="# Page Title&#10;&#10;Write your markdown content here…&#10;&#10;Tip: link to other pages with [[PageName]]"></textarea>
+            <!-- Content area: edit pane / preview pane / empty state share this one space -->
+            <div class="lab-wiki-content">
+              <!-- Edit pane -->
+              <div id="wiki-edit-pane" class="lab-wiki-pane" hidden>
+                <textarea id="wiki-editor-content" class="lab-wiki-editor__content" placeholder="# Page Title&#10;&#10;Write your markdown content here…&#10;&#10;Tip: link to other pages with [[PageName]]"></textarea>
+              </div>
+
+              <!-- Preview pane -->
+              <div id="wiki-preview-pane" class="lab-wiki-pane" hidden>
+                <div id="wiki-preview-content" class="lab-wiki-preview"></div>
+              </div>
+
+              <!-- Empty state -->
+              <div id="wiki-empty-state" class="lab-wiki-empty">
+                <div class="lab-wiki-empty__icon">📖</div>
+                <h3>Knowledge Wiki</h3>
+                <p>Select a page or create a new one.</p>
+                <button class="lab-btn lab-btn--primary" id="wiki-empty-new-btn" type="button">+ Create first page</button>
+              </div>
             </div>
 
-            <!-- Preview pane -->
-            <div id="wiki-preview-pane" class="lab-wiki-pane" hidden>
-              <div id="wiki-preview-content" class="lab-wiki-preview"></div>
-            </div>
-
-            <!-- Empty state -->
-            <div id="wiki-empty-state" class="lab-wiki-empty">
-              <div class="lab-wiki-empty__icon">📖</div>
-              <h3>Knowledge Wiki</h3>
-              <p>Select a page or create a new one.</p>
-              <button class="lab-btn lab-btn--primary" id="wiki-empty-new-btn" type="button">+ Create first page</button>
-            </div>
-
-            <!-- Health panel (toggle) -->
+            <!-- Health panel (toggle, outside content area so it pushes up from bottom) -->
             <div id="wiki-health-panel" class="lab-wiki-health" hidden></div>
           </div>
         </div>
