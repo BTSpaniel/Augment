@@ -76,6 +76,8 @@ DEFAULT_ZONE_MEMBERSHIP: Dict[Zone, List[str]] = {
         # benefits from the recency primacy of the U-shape.
         "turn_state",
         "message_ledger",
+        "evidence",
+        "learning_signals",
         "recent_history",
     ],
 }
@@ -116,6 +118,7 @@ def default_zone_layout() -> ZoneLayout:
         dumb_middle=tuple(DEFAULT_ZONE_MEMBERSHIP[Zone.DUMB_MIDDLE]),
         smart_bottom=tuple(DEFAULT_ZONE_MEMBERSHIP[Zone.SMART_BOTTOM]),
     )
+
 
 
 def zone_layout_from_config(spec: Mapping[str, Sequence[str]] | None) -> ZoneLayout:

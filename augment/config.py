@@ -30,6 +30,9 @@ class ProviderConfig:
     # user pins an explicit value here (or in the YAML), the resolver
     # treats it as the highest-precedence override.
     context_window: int = 0
+    # Path to a local GGUF model file. Only used by LlamaCppProvider (the
+    # embedded llama-cpp-python library, not the llama.cpp HTTP server).
+    model_path: str = ""
 
     @property
     def resolved_api_key(self) -> str:

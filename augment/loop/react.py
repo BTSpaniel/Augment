@@ -3,6 +3,7 @@ from __future__ import annotations
 import ast
 import json
 import re
+import time
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
@@ -68,6 +69,7 @@ class ReActLoop:
         exploration_streak = 0
         mutated_tools: list[str] = []
         for iteration in range(1, self._max_iterations + 1):
+            _gen_start = time.monotonic()
             try:
                 response = await self._generate(
                     messages,
@@ -77,19 +79,21 @@ class ReActLoop:
             except ProviderError:
                 raise
             except Exception as exc:
-                pad.error(str(exc))
+                _gen_ms = (time.monotonic() - _gen_start) * 1000
+                pad.error(str(exc), iteration=iteration)
                 if step_callback:
                     await step_callback({"kind": "error", "content": str(exc)})
                 return ReActResult(f"Agent error: {exc}", pad, tool_calls, iteration, "error", mutated_tools)
+            _gen_ms = (time.monotonic() - _gen_start) * 1000
 
             plans = extract_tool_plans(response.content)
             native_calls = list(response.tool_calls or [])
             if plans:
                 visible = strip_tool_plan_blocks(response.content)
                 if visible:
-                    pad.thought(visible)
+                    pad.thought(visible, iteration=iteration, duration_ms=_gen_ms)
                     if step_callback:
-                        await step_callback({"kind": "thought", "content": visible})
+                        await step_callback({"kind": "thought", "content": visible, "duration_ms": _gen_ms})
                 messages.append(Message("assistant", response.content))
                 for plan in plans:
                     if step_callback:
@@ -98,8 +102,13 @@ class ReActLoop:
                     tool_calls += len(results)
                     all_explore = True
                     for item in results:
-                        pad.action(item["tool"], item["args"])
-                        pad.observation(item["output"] if item["success"] else item["error"], success=item["success"])
+                        pad.action(item["tool"], item["args"], iteration=iteration)
+                        pad.observation(
+                            item["output"] if item["success"] else item["error"],
+                            success=item["success"],
+                            iteration=iteration,
+                            duration_ms=float(item.get("duration_ms") or 0.0),
+                        )
                         if item["tool"] not in _EXPLORATION_TOOLS:
                             all_explore = False
                             mutated_tools.append(item["tool"])
@@ -117,14 +126,14 @@ class ReActLoop:
             if native_calls:
                 assistant_content = self._strip_fallback_blocks(response.content)
                 if assistant_content:
-                    pad.thought(assistant_content)
+                    pad.thought(assistant_content, iteration=iteration, duration_ms=_gen_ms)
                     if step_callback:
-                        await step_callback({"kind": "thought", "content": assistant_content})
+                        await step_callback({"kind": "thought", "content": assistant_content, "duration_ms": _gen_ms})
                 messages.append(Message("assistant", assistant_content, tool_calls=native_calls))
                 only_explore = True
                 for call in native_calls:
                     name, args = self._tool_call_parts(call)
-                    pad.action(name, args)
+                    pad.action(name, args, iteration=iteration)
                     if step_callback:
                         await step_callback({"kind": "action", "tool": name, "args": args})
                     draft = (
@@ -150,7 +159,12 @@ class ReActLoop:
                             # model can replan without unrelated context noise.
                             result.success = False
                             result.error = receipt_info.get("error") or result.error
-                    pad.observation(result.output if result.success else result.error, success=result.success)
+                    pad.observation(
+                        result.output if result.success else result.error,
+                        success=result.success,
+                        iteration=iteration,
+                        duration_ms=result.duration_ms or 0.0,
+                    )
                     if name not in _EXPLORATION_TOOLS:
                         only_explore = False
                         mutated_tools.append(name)
@@ -181,8 +195,9 @@ class ReActLoop:
                 continue
 
             final = response.content.strip()
+            pad.thought(final, iteration=iteration, duration_ms=_gen_ms)
             if step_callback:
-                await step_callback({"kind": "final", "content": final})
+                await step_callback({"kind": "final", "content": final, "duration_ms": _gen_ms})
             return ReActResult(final, pad, tool_calls, iteration, "final_answer", mutated_tools)
 
         return ReActResult("I reached the iteration limit before a final answer.", pad, tool_calls, self._max_iterations, "max_iterations", mutated_tools)

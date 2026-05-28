@@ -183,6 +183,7 @@ class SettingsStore:
             model=str(raw.get("model") or ""),
             timeout_seconds=float(raw.get("timeout_seconds") or 120.0),
             context_window=int(raw.get("context_window") or 0),
+            model_path=str(raw.get("model_path") or ""),
         )
 
     def presets_catalog(self) -> list[dict[str, Any]]:

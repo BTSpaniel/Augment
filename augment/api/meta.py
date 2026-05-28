@@ -995,3 +995,51 @@ async def thinking_start(body: ThinkingStartBody, request: Request) -> dict[str,
 @router.post("/mind/thinking/stop")
 async def thinking_stop(request: Request) -> dict[str, Any]:
     return {"status": request.app.state.augment.stop_thinking()}
+
+
+# ── Usage stats ───────────────────────────────────────────────────────
+
+
+@router.get("/usage")
+async def usage_stats(request: Request) -> dict[str, Any]:
+    """Return accumulated token + tool usage statistics."""
+    return request.app.state.augment.usage.snapshot()
+
+
+@router.post("/usage/reset")
+async def usage_reset(request: Request) -> dict[str, Any]:
+    """Clear all accumulated usage stats."""
+    request.app.state.augment.usage.reset()
+    return {"ok": True}
+
+
+# ── Audit ─────────────────────────────────────────────────────────────
+
+
+@router.get("/audit")
+async def audit_tail(
+    request: Request,
+    session_id: str = "",
+    limit: int = 100,
+) -> dict[str, Any]:
+    """Return the last *limit* audit events (global or per-session)."""
+    ledger = request.app.state.augment.audit
+    events = ledger.tail(session_id=session_id, limit=limit)
+    return {"events": [ev.to_dict() for ev in events], "count": len(events)}
+
+
+@router.get("/audit/replay")
+async def audit_replay(
+    request: Request,
+    session_id: str = "",
+    correlation_id: str = "",
+    limit: int = 200,
+) -> dict[str, Any]:
+    """Return a structured replay view with causal chains and timeline groups."""
+    from augment.audit.replay import build_audit_replay
+    return build_audit_replay(
+        request.app.state.augment.config.data_dir,
+        session_id=session_id,
+        correlation_id=correlation_id,
+        limit=limit,
+    )

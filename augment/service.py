@@ -38,6 +38,14 @@ from augment.soul import (
     reset_agent_soul_files,
     write_agent_soul_files,
 )
+from augment.audit.ledger import AuditLedger
+from augment.providers.usage import UsageTracker, init_usage_tracker
+from augment.security.safety_monitor import SafetyMonitor, get_safety_monitor
+from augment.sessions.evidence import build_evidence_context
+from augment.sessions.learning import build_learning_signals_context
+from augment.sessions.followup import build_followup_context
+from augment.sessions.evolution import build_evolution_suggestions_context
+from augment.context.health import build_context_health_block
 from augment.tools.default import build_tool_registry
 from augment.tools.packs import list_tool_packs, list_tools
 from augment.tools.registry import ToolRegistry
@@ -107,6 +115,12 @@ class AugmentApp:
         # the in-flight LLM call keeps running while the dropped SSE
         # subscriber goes away cleanly.
         self.streams = StreamRegistry()
+        # Audit ledger — structured JSONL event trail for every session.
+        self.audit = AuditLedger(self.config.data_dir)
+        # Usage tracker — rolling per-profile token counts and tool stats.
+        self.usage: UsageTracker = init_usage_tracker(self.config.data_dir)
+        # Safety monitor — dangerous-command and secret-path classification.
+        self.safety: SafetyMonitor = get_safety_monitor()
         self.mind.on_event("new_session", "service boot")
 
     def _active_model_id(self) -> str:
@@ -144,6 +158,20 @@ class AugmentApp:
                 pass
         self.agent.record_session(resumed=resumed)
         self.agent.mark_status("thinking", detail=f"session {sid[:14]}")
+        # Resolve short follow-up fragments against recent history before
+        # doing anything else so the model gets the enriched message.
+        history_so_far = self.sessions.history(sid, limit=10)
+        history_dicts = [{"role": item.role, "content": item.content} for item in history_so_far]
+        scratchboard_snapshot = self.scratchboards.context_block(sid, max_chars=600)
+        resolved_message = build_followup_context(message, history_dicts, scratchboard_snapshot)
+        # Audit the inbound user message.
+        self.audit.append(
+            "message",
+            actor="user",
+            session_id=sid,
+            status="received",
+            payload={"content": message[:800], "resolved": resolved_message != message},
+        )
         self.sessions.append(sid, "user", message)
         self.memory.remember_from_user(message, session_id=sid)
         # Sessions-depth: observe the user turn before building the prompt.
@@ -175,6 +203,16 @@ class AugmentApp:
         project_conventions_block = self.conventions.context_block()
         user_rules_block = self.rules_store.context_block()
         coding_contract_block = self.coding_contracts.context_block(sid)
+        # Audit-backed intelligence sections (empty until first tool events exist).
+        evidence_context = build_evidence_context(
+            self.config.data_dir, session_id=sid, query=message, max_chars=2600,
+        )
+        learning_signals_context = build_learning_signals_context(
+            self.config.data_dir, session_id=sid, query=message, max_chars=2200,
+        )
+        evolution_context = build_evolution_suggestions_context(
+            self.config.data_dir, session_id=sid, query=message, max_chars=2200,
+        )
         system_prompt = self.context.build(
             message=message,
             history=history[:-1],
@@ -192,11 +230,25 @@ class AugmentApp:
             project_conventions=project_conventions_block,
             user_rules=user_rules_block,
             coding_contract=coding_contract_block,
+            evidence=evidence_context,
+            learning_signals=learning_signals_context,
         )
         # Emit the assembled-context snapshot so the UI can render a
         # "bleep" expandable panel in the thinking bubble — same idea as
         # Blackboard's "bleeping" phase + FAIL's section inspector but
         # surfaced inline in the streaming chat.
+        context_health_block = build_context_health_block(
+            {
+                k: v for k, v in {
+                    "evidence": evidence_context,
+                    "learning_signals": learning_signals_context,
+                    "evolution": evolution_context,
+                    "scratchboard": scratchboard_context,
+                    "message_ledger": message_ledger_context,
+                    "memory_tiers": memory_context,
+                }.items() if v
+            }
+        )
         bleep_event = {
             "kind": "bleep",
             "session_id": sid,
@@ -204,6 +256,8 @@ class AugmentApp:
             "prompt_preview": system_prompt[:2000],
             "prompt_chars": len(system_prompt),
             "message": message[:300],
+            "context_health": context_health_block,
+            "evolution": evolution_context[:400] if evolution_context else "",
         }
         if step_callback:
             outcome = step_callback(bleep_event)
@@ -229,10 +283,25 @@ class AugmentApp:
                     emitted_tool_calls += 1
                 event["tool_calls"] = emitted_tool_calls
                 if kind == "observation":
-                    self.agent.record_tool_run(
-                        str(event.get("tool") or "tool"),
-                        success=bool(event.get("success", True)),
-                        duration_ms=float(event.get("duration_ms") or 0.0),
+                    tool_name = str(event.get("tool") or "tool")
+                    tool_ok = bool(event.get("success", True))
+                    tool_ms = float(event.get("duration_ms") or 0.0)
+                    self.agent.record_tool_run(tool_name, success=tool_ok, duration_ms=tool_ms)
+                    self.usage.record_tool_call(
+                        tool_name=tool_name, success=tool_ok, elapsed_ms=tool_ms,
+                    )
+                    self.audit.append(
+                        "tool",
+                        actor="agent",
+                        session_id=sid,
+                        source=tool_name,
+                        status="ok" if tool_ok else "error",
+                        payload={
+                            "tool": tool_name,
+                            "output": str(event.get("output") or "")[:600],
+                            "error": str(event.get("error") or "")[:300],
+                            "duration_ms": tool_ms,
+                        },
                     )
             if step_callback:
                 outcome = step_callback(event)
@@ -241,7 +310,7 @@ class AugmentApp:
 
         try:
             result = await loop.run(
-                message,
+                resolved_message,
                 history_messages=loop_history,
                 tool_context={
                     "workspace_root": str(self.config.workspace_root),
@@ -264,6 +333,31 @@ class AugmentApp:
             raise
         self.sessions.append(sid, "assistant", result.content)
         self.agent.mark_status("idle", detail=result.stopped_reason)
+        # Audit the assistant reply.
+        self.audit.append(
+            "message",
+            actor="assistant",
+            session_id=sid,
+            status=result.stopped_reason,
+            payload={
+                "content": result.content[:600],
+                "iterations": result.iterations,
+                "tool_calls": result.tool_calls,
+            },
+        )
+        # Record provider-level token usage (best-effort — not all providers
+        # expose token counts; we track 0s so call counts are always correct).
+        try:
+            provider = self.providers.default()
+            self.usage.record(
+                profile_id=str(getattr(provider, "id", "") or "default"),
+                role="chat",
+                prompt=0,
+                completion=0,
+                model=str(getattr(provider, "model", "") or ""),
+            )
+        except Exception:
+            pass
         # Mirror the assistant turn into sessions-depth.
         self.scratchboards.update(sid, role="assistant", content=result.content)
         self.turn_states.update(sid, role="assistant", content=result.content)
@@ -327,18 +421,32 @@ class AugmentApp:
         self.providers = ProviderRegistry(self.config, self.settings.provider_config())
 
     async def _refresh_profile_models(self, profile_id: str) -> tuple[list[str], str]:
+        from augment.providers.base import ProviderError
         from augment.providers.registry import build_provider
 
         provider_cfg = self.settings.provider_config(profile_id)
         provider = build_provider(provider_cfg)
+        error_msg = ""
         try:
             models = await provider.list_models()
+        except ProviderError as exc:
+            error_msg = str(exc)
+            _raw = self.settings._read_state()["profiles"].get(profile_id) or {}
+            models = list(_raw.get("models") or [])
+        except Exception as exc:
+            error_msg = str(exc)
+            _raw = self.settings._read_state()["profiles"].get(profile_id) or {}
+            models = list(_raw.get("models") or [])
         finally:
             close = getattr(provider, "close", None)
             if callable(close):
-                await provider.close()
-        self.settings.save_profile_models(profile_id, models)
-        return models, ""
+                try:
+                    await provider.close()
+                except Exception:
+                    pass
+        if models:
+            self.settings.save_profile_models(profile_id, models)
+        return models, error_msg
 
     async def update_provider(self, values: dict[str, Any]) -> dict[str, Any]:
         """Back-compat updater used by ``PUT /api/providers``.
@@ -405,9 +513,12 @@ class AugmentApp:
 
     async def refresh_provider_models(self, profile_id: str | None = None) -> dict[str, Any]:
         pid = profile_id or self.settings.default_profile_id()
-        models, _ = await self._refresh_profile_models(pid)
+        models, error = await self._refresh_profile_models(pid)
         snapshot = self.settings.public_snapshot()
-        return {"profile_id": pid, "models": models, "loaded": len(models), **snapshot}
+        result: dict[str, Any] = {"profile_id": pid, "models": models, "loaded": len(models), **snapshot}
+        if error:
+            result["warning"] = error
+        return result
 
     async def discover_providers(self) -> dict[str, Any]:
         outcome = self.settings.discover_providers(self.config.discover_sources)

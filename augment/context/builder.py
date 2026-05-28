@@ -106,6 +106,8 @@ class ContextBuilder:
         project_conventions: str = "",
         user_rules: str = "",
         coding_contract: str = "",
+        evidence: str = "",
+        learning_signals: str = "",
     ) -> str:
         # ── 1) Collect raw section content ───────────────────────────
         raw_sections: dict[str, str] = {
@@ -128,6 +130,8 @@ class ContextBuilder:
             "session_mailbox":  mailbox_context,
             "turn_state":       turn_state,
             "message_ledger":   message_ledger,
+            "evidence":         evidence,
+            "learning_signals": learning_signals,
             "recent_history":   self._history(history),
         }
 

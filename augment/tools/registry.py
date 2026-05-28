@@ -7,6 +7,8 @@ import time
 from dataclasses import dataclass, field
 from typing import Any, Awaitable, Callable
 
+from augment.security.safety_monitor import get_safety_monitor
+
 
 ToolHandler = Callable[..., str | dict[str, Any] | list[Any] | Awaitable[str | dict[str, Any] | list[Any]]]
 
@@ -82,6 +84,15 @@ class ToolRegistry:
         tool = self._tools.get(name)
         if tool is None:
             return ToolResult(name, False, "", f"Unknown tool: {name}")
+        # Safety pre-check: classify the proposed action before execution.
+        decision = get_safety_monitor().classify(
+            name, dict(args or {}),
+            context=context or {},
+            read_only=tool.read_only,
+            tags=list(tool.tags or []),
+        )
+        if not decision.allowed:
+            return ToolResult(name, False, "", decision.message, 0.0)
         started = time.perf_counter()
         try:
             call_args = dict(args or {})

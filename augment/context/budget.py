@@ -71,7 +71,9 @@ DEFAULT_SLOTS: Dict[str, tuple[float, float, float]] = {
     # ── smart_bottom ───────────────────────────────────────────────
     "turn_state":       (3.0,  0.0,  6.0),
     "message_ledger":   (5.0,  2.0, 10.0),
-    "recent_history":  (26.0, 18.0, 55.0),   # residual section
+    "evidence":         (2.0,  0.0,  5.0),   # audit-backed VERIFIED/FAILED tool runs
+    "learning_signals": (2.0,  0.0,  5.0),   # corrections/praise/tool-failure patterns
+    "recent_history":  (22.0, 14.0, 55.0),   # residual section
     # ── buffer (never allocated) ───────────────────────────────────
     "buffer":           (9.0,  5.0, 15.0),
 }
