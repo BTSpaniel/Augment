@@ -42,6 +42,7 @@
       <div class="lab-sidebar__divider"></div>
       <nav class="lab-sidebar__secondary" aria-label="Workspace pages">
         <button class="lab-nav__item" data-page="memory" type="button"><span class="lab-nav__icon">📚</span> Memory</button>
+        <button class="lab-nav__item" data-page="wiki" type="button"><span class="lab-nav__icon">📖</span> Wiki</button>
         <button class="lab-nav__item" data-page="toolpacks" type="button"><span class="lab-nav__icon">🧰</span> Tool Packs</button>
         <button class="lab-nav__item" data-page="skillpacks" type="button"><span class="lab-nav__icon">🧠</span> Skill Packs</button>
         <button class="lab-nav__item" data-page="logs" type="button"><span class="lab-nav__icon">📜</span> Logs</button>
@@ -157,6 +158,39 @@
       <section class="lab-page" data-page="memory" id="page-memory">
         <header class="lab-page__header"><h2>Memory</h2><p>Facts the agent has captured across sessions.</p></header>
         <div id="memory-list" class="lab-list"></div>
+      </section>
+
+      <section class="lab-page" data-page="wiki" id="page-wiki">
+        <header class="lab-page__header">
+          <div>
+            <h2>Knowledge Wiki</h2>
+            <p>Durable markdown knowledge base — agent-written and human-editable.</p>
+          </div>
+          <div class="lab-page__header-actions">
+            <input id="wiki-search-input" class="lab-input" placeholder="Search pages…" type="search" />
+            <button id="wiki-new-btn" class="lab-btn lab-btn--primary" type="button">+ New Page</button>
+            <button id="wiki-consolidate-btn" class="lab-btn" type="button" title="Promote memory tiers into wiki pages">⟳ From Memory</button>
+            <button id="wiki-health-btn" class="lab-btn lab-btn--ghost" type="button" title="Wiki health check">Health</button>
+            <button id="wiki-refresh-btn" class="lab-btn lab-btn--ghost" type="button">↻</button>
+          </div>
+        </header>
+        <div class="lab-wiki-layout">
+          <aside class="lab-wiki-sidebar">
+            <div id="wiki-page-list" class="lab-wiki-list"><div class="lab-empty">No wiki pages yet.</div></div>
+          </aside>
+          <section class="lab-wiki-editor" id="wiki-editor" hidden>
+            <div class="lab-wiki-editor__head">
+              <input id="wiki-editor-name" class="lab-input" placeholder="Page name (e.g. decisions/AuthDesign)" />
+              <div class="lab-wiki-editor__acts">
+                <button id="wiki-save-btn" class="lab-btn lab-btn--primary lab-btn--sm" type="button">Save</button>
+                <button id="wiki-delete-btn" class="lab-btn lab-btn--danger lab-btn--sm" type="button">Delete</button>
+                <button id="wiki-editor-close-btn" class="lab-btn lab-btn--ghost lab-btn--sm" type="button">✕</button>
+              </div>
+            </div>
+            <textarea id="wiki-editor-content" class="lab-wiki-editor__content" rows="22" placeholder="# Page Title&#10;&#10;Write markdown content here…"></textarea>
+          </section>
+        </div>
+        <div id="wiki-health-panel" class="lab-wiki-health" hidden></div>
       </section>
 
       <section class="lab-page" data-page="toolpacks" id="page-toolpacks">
@@ -454,7 +488,7 @@
   -->
   <script src="https://cdn.jsdelivr.net/npm/marked@12.0.2/marked.min.js"></script>
   <link rel="stylesheet" href="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/styles/github-dark.min.css" />
-  <script src="https://cdn.jsdelivr.net/npm/highlight.js@11.9.0/lib/common.min.js"></script>
+  <script src="https://cdn.jsdelivr.net/gh/highlightjs/cdn-release@11.9.0/build/highlight.min.js"></script>
   <script src="/ui/app.js"></script>
 </body>
 </html>
