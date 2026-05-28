@@ -123,9 +123,14 @@ const els = {
   thinkingStatus: qs('#thinking-status'),
   thinkingLog: qs('#thinking-log'),
   wikiPageList: qs('#wiki-page-list'),
-  wikiEditor: qs('#wiki-editor'),
+  wikiToolbar: qs('#wiki-toolbar'),
   wikiEditorName: qs('#wiki-editor-name'),
   wikiEditorContent: qs('#wiki-editor-content'),
+  wikiEditPane: qs('#wiki-edit-pane'),
+  wikiPreviewPane: qs('#wiki-preview-pane'),
+  wikiPreviewContent: qs('#wiki-preview-content'),
+  wikiEmptyState: qs('#wiki-empty-state'),
+  wikiEmptyNewBtn: qs('#wiki-empty-new-btn'),
   wikiSaveBtn: qs('#wiki-save-btn'),
   wikiDeleteBtn: qs('#wiki-delete-btn'),
   wikiEditorCloseBtn: qs('#wiki-editor-close-btn'),
@@ -135,6 +140,8 @@ const els = {
   wikiRefreshBtn: qs('#wiki-refresh-btn'),
   wikiSearchInput: qs('#wiki-search-input'),
   wikiHealthPanel: qs('#wiki-health-panel'),
+  wikiSaveState: qs('#wiki-save-state'),
+  wikiTabs: qsa('[data-wiki-tab]'),
 };
 
 const state = {
@@ -155,6 +162,8 @@ const state = {
   consoleEvents: [],
   wikiPages: [],
   wikiActivePage: null,
+  wikiTab: 'edit',
+  wikiModified: false,
   // Whether the active provider advertises vision capability.
   visionEnabled: false,
   queueMode: localStorage.getItem('augment.queueMode') || 'ask',
@@ -243,19 +252,27 @@ function bindEvents() {
   els.thinkingRefreshBtn?.addEventListener('click', loadThinking);
   els.logsRefreshBtn?.addEventListener('click', loadLogs);
   els.wikiNewBtn?.addEventListener('click', openNewWikiPage);
+  els.wikiEmptyNewBtn?.addEventListener('click', openNewWikiPage);
   els.wikiRefreshBtn?.addEventListener('click', loadWiki);
   els.wikiSaveBtn?.addEventListener('click', saveWikiPage);
   els.wikiDeleteBtn?.addEventListener('click', deleteWikiPage);
   els.wikiConsolidateBtn?.addEventListener('click', consolidateWiki);
   els.wikiHealthBtn?.addEventListener('click', showWikiHealth);
-  els.wikiEditorCloseBtn?.addEventListener('click', () => {
-    if (els.wikiEditor) els.wikiEditor.hidden = true;
-    state.wikiActivePage = null;
-    renderWikiPageList(state.wikiPages);
-  });
+  els.wikiEditorCloseBtn?.addEventListener('click', closeWikiEditor);
+  els.wikiEditorContent?.addEventListener('input', () => setWikiModified(true));
+  els.wikiTabs.forEach((tab) => tab.addEventListener('click', () => switchWikiTab(tab.dataset.wikiTab)));
   els.wikiSearchInput?.addEventListener('input', () => {
     clearTimeout(els.wikiSearchInput._t);
-    els.wikiSearchInput._t = setTimeout(loadWiki, 320);
+    els.wikiSearchInput._t = setTimeout(loadWiki, 280);
+  });
+  document.addEventListener('keydown', (e) => {
+    if ((e.ctrlKey || e.metaKey) && e.key === 's') {
+      const wikiPage = document.getElementById('page-wiki');
+      if (wikiPage && wikiPage.classList.contains('active') && !els.wikiToolbar?.hidden) {
+        e.preventDefault();
+        saveWikiPage();
+      }
+    }
   });
   bindSidebarContextMenu();
 }
@@ -2809,92 +2826,201 @@ async function loadMemory() {
 }
 
 /* ── Wiki ───────────────────────────────────────────────────────── */
+
+function setWikiModified(v) {
+  state.wikiModified = v;
+  if (els.wikiSaveState) els.wikiSaveState.textContent = v ? '● unsaved' : '';
+}
+
+function switchWikiTab(tab) {
+  state.wikiTab = tab;
+  els.wikiTabs.forEach((t) => t.classList.toggle('active', t.dataset.wikiTab === tab));
+  if (tab === 'preview') {
+    if (els.wikiEditPane) els.wikiEditPane.hidden = true;
+    if (els.wikiPreviewPane) els.wikiPreviewPane.hidden = false;
+    const md = els.wikiEditorContent ? els.wikiEditorContent.value : '';
+    if (els.wikiPreviewContent) {
+      try {
+        els.wikiPreviewContent.innerHTML = window.marked ? marked.parse(md) : `<pre>${esc(md)}</pre>`;
+        qsa('pre code', els.wikiPreviewContent).forEach((block) => window.hljs && hljs.highlightElement(block));
+      } catch (_) {
+        els.wikiPreviewContent.innerHTML = `<pre>${esc(md)}</pre>`;
+      }
+    }
+  } else {
+    if (els.wikiEditPane) els.wikiEditPane.hidden = false;
+    if (els.wikiPreviewPane) els.wikiPreviewPane.hidden = true;
+  }
+}
+
+function _showWikiEditor(show) {
+  if (els.wikiToolbar) els.wikiToolbar.hidden = !show;
+  if (els.wikiEmptyState) els.wikiEmptyState.hidden = show;
+  if (show) {
+    if (state.wikiTab === 'edit') {
+      if (els.wikiEditPane) els.wikiEditPane.hidden = false;
+      if (els.wikiPreviewPane) els.wikiPreviewPane.hidden = true;
+    }
+    if (els.wikiHealthPanel) els.wikiHealthPanel.hidden = true;
+  }
+}
+
+function closeWikiEditor() {
+  _showWikiEditor(false);
+  if (els.wikiEditPane) els.wikiEditPane.hidden = true;
+  if (els.wikiPreviewPane) els.wikiPreviewPane.hidden = true;
+  state.wikiActivePage = null;
+  setWikiModified(false);
+  renderWikiTree(state.wikiPages);
+}
+
 async function loadWiki() {
   if (!els.wikiPageList) return;
-  els.wikiPageList.innerHTML = '<div class="lab-empty">Loading wiki…</div>';
+  els.wikiPageList.innerHTML = '<div class="lab-empty" style="padding:12px">Loading…</div>';
   try {
     const q = (els.wikiSearchInput && els.wikiSearchInput.value.trim()) || '';
     let pages;
     if (q) {
-      const data = await request(`/api/wiki/search?q=${encodeURIComponent(q)}&max_results=20`);
+      const data = await request(`/api/wiki/search?q=${encodeURIComponent(q)}&max_results=30`);
       pages = data.results || [];
     } else {
       const data = await request('/api/wiki/pages');
       pages = data.pages || [];
     }
     state.wikiPages = pages;
-    renderWikiPageList(pages);
+    renderWikiTree(pages);
+    if (!pages.length && !q) _showWikiEditor(false);
   } catch (err) {
-    els.wikiPageList.innerHTML = `<div class="lab-empty">Wiki unavailable: ${esc(err.message)}</div>`;
+    els.wikiPageList.innerHTML = `<div class="lab-empty" style="padding:12px">Wiki unavailable: ${esc(err.message)}</div>`;
   }
 }
 
-function renderWikiPageList(pages) {
+function renderWikiTree(pages) {
   if (!els.wikiPageList) return;
   if (!pages.length) {
-    els.wikiPageList.innerHTML = '<div class="lab-empty">No pages yet. Use &ldquo;+ New Page&rdquo; to create one.</div>';
+    const q = els.wikiSearchInput ? els.wikiSearchInput.value.trim() : '';
+    if (q) {
+      els.wikiPageList.innerHTML = `
+        <div class="lab-wiki-noresult">
+          <div>No pages matching <strong>${esc(q)}</strong></div>
+          <button class="lab-btn lab-btn--primary lab-btn--sm" id="wiki-create-from-search" type="button">+ Create &ldquo;${esc(q)}&rdquo;</button>
+        </div>`;
+      qs('#wiki-create-from-search')?.addEventListener('click', () => {
+        if (els.wikiEditorName) els.wikiEditorName.value = q;
+        if (els.wikiEditorContent) els.wikiEditorContent.value = `# ${q}\n\n`;
+        state.wikiActivePage = null;
+        _showWikiEditor(true);
+        switchWikiTab('edit');
+        els.wikiEditorContent?.focus();
+      });
+    } else {
+      els.wikiPageList.innerHTML = '<div class="lab-empty" style="padding:12px">No pages yet.</div>';
+    }
     return;
   }
-  els.wikiPageList.innerHTML = pages.map((p) => `
-    <div class="lab-wiki-page-item${state.wikiActivePage === p.name ? ' active' : ''}" data-wiki-name="${esc(p.name)}">
-      <span class="lab-wiki-page-item__name">${esc(p.name)}</span>
-      <span class="lab-wiki-page-item__summary">${esc(p.summary || '')}</span>
-    </div>
-  `).join('');
+
+  const folders = {};
+  const roots = [];
+  pages.forEach((p) => {
+    const parts = p.name.split('/');
+    if (parts.length > 1) {
+      const folder = parts.slice(0, -1).join('/');
+      if (!folders[folder]) folders[folder] = [];
+      folders[folder].push(p);
+    } else {
+      roots.push(p);
+    }
+  });
+
+  const pageItem = (p) => `
+    <div class="lab-wiki-item${state.wikiActivePage === p.name ? ' active' : ''}" data-wiki-name="${esc(p.name)}" title="${esc(p.summary || p.name)}">
+      <span class="lab-wiki-item__icon">📄</span>
+      <span class="lab-wiki-item__name">${esc(p.name.split('/').pop())}</span>
+    </div>`;
+
+  let html = '';
+  Object.keys(folders).sort().forEach((folder) => {
+    const isOpen = folders[folder].some((p) => p.name === state.wikiActivePage) || true;
+    html += `<div class="lab-wiki-folder" data-folder="${esc(folder)}">
+      <div class="lab-wiki-folder__head">
+        <span class="lab-wiki-folder__icon">${isOpen ? '▾' : '▸'}</span>
+        <span class="lab-wiki-folder__name">${esc(folder)}</span>
+        <span class="lab-pill">${folders[folder].length}</span>
+      </div>
+      <div class="lab-wiki-folder__pages">${folders[folder].map(pageItem).join('')}</div>
+    </div>`;
+  });
+  roots.forEach((p) => { html += pageItem(p); });
+
+  els.wikiPageList.innerHTML = html;
+
   qsa('[data-wiki-name]', els.wikiPageList).forEach((el) =>
     el.addEventListener('click', () => openWikiPage(el.dataset.wikiName))
   );
+  qsa('.lab-wiki-folder__head', els.wikiPageList).forEach((head) => {
+    head.addEventListener('click', () => {
+      const folder = head.closest('.lab-wiki-folder');
+      folder.classList.toggle('collapsed');
+    });
+  });
 }
 
 async function openWikiPage(name) {
-  if (!els.wikiEditor || !els.wikiEditorName || !els.wikiEditorContent) return;
+  if (!els.wikiEditorName || !els.wikiEditorContent) return;
   try {
     const data = await request(`/api/wiki/page?name=${encodeURIComponent(name)}`);
     state.wikiActivePage = name;
     els.wikiEditorName.value = name;
     els.wikiEditorContent.value = data.content || '';
-    els.wikiEditor.hidden = false;
-    renderWikiPageList(state.wikiPages);
+    setWikiModified(false);
+    _showWikiEditor(true);
+    switchWikiTab('edit');
     els.wikiEditorContent.focus();
+    renderWikiTree(state.wikiPages);
   } catch (err) {
     flash(`Wiki read failed: ${err.message}`);
   }
 }
 
 function openNewWikiPage() {
-  if (!els.wikiEditor) return;
   state.wikiActivePage = null;
-  els.wikiEditorName.value = '';
-  els.wikiEditorContent.value = '';
-  els.wikiEditor.hidden = false;
-  els.wikiEditorName.focus();
+  if (els.wikiEditorName) els.wikiEditorName.value = '';
+  if (els.wikiEditorContent) els.wikiEditorContent.value = '';
+  setWikiModified(false);
+  _showWikiEditor(true);
+  switchWikiTab('edit');
+  els.wikiEditorName?.focus();
 }
 
 async function saveWikiPage() {
   const name = (els.wikiEditorName && els.wikiEditorName.value.trim()) || '';
   const content = (els.wikiEditorContent && els.wikiEditorContent.value) || '';
-  if (!name) { flash('Page name required'); return; }
-  if (!content.trim()) { flash('Content required'); return; }
+  if (!name) { flash('Page name required'); els.wikiEditorName?.focus(); return; }
+  if (!content.trim()) { flash('Content required'); els.wikiEditorContent?.focus(); return; }
+  if (els.wikiSaveBtn) els.wikiSaveBtn.disabled = true;
   try {
     await request('/api/wiki/page', { method: 'POST', body: { name, content, source: 'ui' } });
-    flash(`Saved: ${name}`);
     state.wikiActivePage = name;
+    setWikiModified(false);
+    flash(`Saved: ${name}`);
     await loadWiki();
+    renderWikiTree(state.wikiPages);
   } catch (err) {
     flash(`Save failed: ${err.message}`);
+  } finally {
+    if (els.wikiSaveBtn) els.wikiSaveBtn.disabled = false;
   }
 }
 
 async function deleteWikiPage() {
   const name = (els.wikiEditorName && els.wikiEditorName.value.trim()) || '';
   if (!name) { flash('No page selected'); return; }
-  const ok = await augmentDialog({ title: `Delete wiki page?`, message: `Delete "${name}"? This cannot be undone.`, confirmLabel: 'Delete', danger: true });
+  const ok = await augmentDialog({ title: 'Delete wiki page?', message: `Delete "${name}"? This cannot be undone.`, confirmLabel: 'Delete', danger: true });
   if (!ok.confirmed) return;
   try {
     await request(`/api/wiki/page?name=${encodeURIComponent(name)}`, { method: 'DELETE' });
     flash(`Deleted: ${name}`);
-    els.wikiEditor.hidden = true;
-    state.wikiActivePage = null;
+    closeWikiEditor();
     await loadWiki();
   } catch (err) {
     flash(`Delete failed: ${err.message}`);
@@ -2916,35 +3042,36 @@ async function consolidateWiki() {
 
 async function showWikiHealth() {
   if (!els.wikiHealthPanel) return;
+  const isVisible = !els.wikiHealthPanel.hidden;
+  if (isVisible) { els.wikiHealthPanel.hidden = true; return; }
   try {
-    const h = await request('/api/wiki/health');
-    const s = await request('/api/wiki/stats');
+    const [h, s] = await Promise.all([request('/api/wiki/health'), request('/api/wiki/stats')]);
     const orphans = (h.orphans || []).length;
     const broken = (h.broken_links || []).length;
     const noSummary = (h.pages_without_summary || []).length;
     const total = h.total_pages || 0;
     els.wikiHealthPanel.hidden = false;
     els.wikiHealthPanel.innerHTML = `
-      <h4>Wiki Health &mdash; ${esc(String(total))} pages</h4>
-      <div class="lab-wiki-health__row">
-        <span>Total pages</span><span class="lab-tag">${esc(String(total))}</span>
+      <div style="display:flex;align-items:center;justify-content:space-between;margin-bottom:8px">
+        <h4 style="margin:0">Wiki Health &mdash; ${esc(String(total))} pages</h4>
+        <button class="lab-btn lab-btn--ghost lab-btn--sm" onclick="this.closest('.lab-wiki-health').hidden=true">✕</button>
       </div>
+      <div class="lab-wiki-health__row"><span>Total pages</span><span class="lab-tag">${esc(String(total))}</span></div>
       <div class="lab-wiki-health__row">
         <span>Orphans (no inbound links)</span>
         <span class="lab-tag ${orphans ? 'lab-tag--warn' : 'lab-tag--ok'}">${esc(String(orphans))}</span>
-        ${orphans ? `<span style="font-size:0.78rem;color:var(--fg-3)">${esc((h.orphans || []).slice(0, 5).join(', '))}</span>` : ''}
+        ${orphans ? `<span class="lab-wiki-health__detail">${esc((h.orphans || []).slice(0, 4).join(', '))}</span>` : ''}
       </div>
       <div class="lab-wiki-health__row">
-        <span>Broken wiki links</span>
+        <span>Broken [[links]]</span>
         <span class="lab-tag ${broken ? 'lab-tag--warn' : 'lab-tag--ok'}">${esc(String(broken))}</span>
+        ${broken ? `<span class="lab-wiki-health__detail">${esc(((h.broken_links || []).slice(0, 2).map((b) => b.page + ' → ' + b.target)).join('; '))}</span>` : ''}
       </div>
       <div class="lab-wiki-health__row">
         <span>Pages without summary</span>
         <span class="lab-tag ${noSummary ? 'lab-tag--warn' : 'lab-tag--ok'}">${esc(String(noSummary))}</span>
       </div>
-      <div class="lab-wiki-health__row">
-        <span>Log entries</span><span class="lab-tag">${esc(String(s.log_entries || 0))}</span>
-      </div>
+      <div class="lab-wiki-health__row"><span>Log entries</span><span class="lab-tag">${esc(String(s.log_entries || 0))}</span></div>
     `;
   } catch (err) {
     if (els.wikiHealthPanel) {

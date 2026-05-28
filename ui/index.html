@@ -160,37 +160,61 @@
         <div id="memory-list" class="lab-list"></div>
       </section>
 
-      <section class="lab-page" data-page="wiki" id="page-wiki">
-        <header class="lab-page__header">
-          <div>
-            <h2>Knowledge Wiki</h2>
-            <p>Durable markdown knowledge base — agent-written and human-editable.</p>
-          </div>
-          <div class="lab-page__header-actions">
-            <input id="wiki-search-input" class="lab-input" placeholder="Search pages…" type="search" />
-            <button id="wiki-new-btn" class="lab-btn lab-btn--primary" type="button">+ New Page</button>
-            <button id="wiki-consolidate-btn" class="lab-btn" type="button" title="Promote memory tiers into wiki pages">⟳ From Memory</button>
-            <button id="wiki-health-btn" class="lab-btn lab-btn--ghost" type="button" title="Wiki health check">Health</button>
-            <button id="wiki-refresh-btn" class="lab-btn lab-btn--ghost" type="button">↻</button>
-          </div>
-        </header>
-        <div class="lab-wiki-layout">
-          <aside class="lab-wiki-sidebar">
-            <div id="wiki-page-list" class="lab-wiki-list"><div class="lab-empty">No wiki pages yet.</div></div>
+      <section class="lab-page lab-page--flush" data-page="wiki" id="page-wiki">
+        <div class="lab-wiki-root">
+          <!-- ── Sidebar ── -->
+          <aside class="lab-wiki-nav">
+            <div class="lab-wiki-nav__search">
+              <input id="wiki-search-input" class="lab-wiki-search" placeholder="🔍 Search pages…" type="search" autocomplete="off" />
+            </div>
+            <div id="wiki-page-list" class="lab-wiki-tree"><div class="lab-empty" style="padding:16px">Loading…</div></div>
+            <div class="lab-wiki-nav__footer">
+              <button id="wiki-new-btn" class="lab-btn lab-btn--primary lab-btn--sm" type="button">+ New</button>
+              <button id="wiki-consolidate-btn" class="lab-btn lab-btn--sm" type="button" title="Promote memory tiers into wiki pages">⟳ From Memory</button>
+              <button id="wiki-health-btn" class="lab-btn lab-btn--ghost lab-btn--sm" type="button" title="Wiki health">Health</button>
+              <button id="wiki-refresh-btn" class="lab-btn lab-btn--ghost lab-btn--sm" type="button" title="Refresh">↻</button>
+            </div>
           </aside>
-          <section class="lab-wiki-editor" id="wiki-editor" hidden>
-            <div class="lab-wiki-editor__head">
-              <input id="wiki-editor-name" class="lab-input" placeholder="Page name (e.g. decisions/AuthDesign)" />
-              <div class="lab-wiki-editor__acts">
-                <button id="wiki-save-btn" class="lab-btn lab-btn--primary lab-btn--sm" type="button">Save</button>
+
+          <!-- ── Editor area ── -->
+          <div class="lab-wiki-main">
+            <!-- Toolbar (shown when a page is open) -->
+            <div class="lab-wiki-toolbar" id="wiki-toolbar" hidden>
+              <input id="wiki-editor-name" class="lab-wiki-name-input" placeholder="Page name (e.g. decisions/AuthDesign)" />
+              <div class="lab-wiki-toolbar__tabs">
+                <button class="lab-wiki-tab active" data-wiki-tab="edit" type="button">Edit</button>
+                <button class="lab-wiki-tab" data-wiki-tab="preview" type="button">Preview</button>
+              </div>
+              <span id="wiki-save-state" class="lab-wiki-save-state"></span>
+              <div class="lab-wiki-toolbar__acts">
+                <button id="wiki-save-btn" class="lab-btn lab-btn--primary lab-btn--sm" type="button">Save <kbd>^S</kbd></button>
                 <button id="wiki-delete-btn" class="lab-btn lab-btn--danger lab-btn--sm" type="button">Delete</button>
                 <button id="wiki-editor-close-btn" class="lab-btn lab-btn--ghost lab-btn--sm" type="button">✕</button>
               </div>
             </div>
-            <textarea id="wiki-editor-content" class="lab-wiki-editor__content" rows="22" placeholder="# Page Title&#10;&#10;Write markdown content here…"></textarea>
-          </section>
+
+            <!-- Edit pane -->
+            <div id="wiki-edit-pane" class="lab-wiki-pane" hidden>
+              <textarea id="wiki-editor-content" class="lab-wiki-editor__content" placeholder="# Page Title&#10;&#10;Write your markdown content here…&#10;&#10;Tip: link to other pages with [[PageName]]"></textarea>
+            </div>
+
+            <!-- Preview pane -->
+            <div id="wiki-preview-pane" class="lab-wiki-pane" hidden>
+              <div id="wiki-preview-content" class="lab-wiki-preview"></div>
+            </div>
+
+            <!-- Empty state -->
+            <div id="wiki-empty-state" class="lab-wiki-empty">
+              <div class="lab-wiki-empty__icon">📖</div>
+              <h3>Knowledge Wiki</h3>
+              <p>Select a page or create a new one.</p>
+              <button class="lab-btn lab-btn--primary" id="wiki-empty-new-btn" type="button">+ Create first page</button>
+            </div>
+
+            <!-- Health panel (toggle) -->
+            <div id="wiki-health-panel" class="lab-wiki-health" hidden></div>
+          </div>
         </div>
-        <div id="wiki-health-panel" class="lab-wiki-health" hidden></div>
       </section>
 
       <section class="lab-page" data-page="toolpacks" id="page-toolpacks">

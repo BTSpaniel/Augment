@@ -3253,82 +3253,238 @@ textarea.lab-dialog__input {
 }
 
 /* ── Wiki page ─────────────────────────────────────────────────── */
-.lab-wiki-layout {
+.lab-page--flush { padding: 0 !important; overflow: hidden; }
+.lab-wiki-root {
   display: grid;
   grid-template-columns: 260px 1fr;
-  gap: 12px;
-  margin-top: 12px;
-  min-height: 480px;
+  height: 100%;
+  min-height: 0;
+  overflow: hidden;
 }
-.lab-wiki-sidebar {
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-card);
-  overflow-y: auto;
-}
-.lab-wiki-list {
+
+/* Sidebar */
+.lab-wiki-nav {
   display: flex;
   flex-direction: column;
+  border-right: 1px solid var(--border);
+  background: var(--bg-card);
+  overflow: hidden;
 }
-.lab-wiki-list .lab-wiki-page-item {
-  padding: 8px 12px;
+.lab-wiki-nav__search {
+  padding: 10px 10px 6px;
   border-bottom: 1px solid var(--border);
-  cursor: pointer;
-  font-size: 0.84rem;
-  color: var(--fg-1);
-  display: flex;
-  flex-direction: column;
-  gap: 2px;
-  transition: background 0.1s;
+  flex-shrink: 0;
 }
-.lab-wiki-list .lab-wiki-page-item:hover { background: var(--hover); }
-.lab-wiki-list .lab-wiki-page-item.active { background: var(--accent-muted, rgba(99,102,241,0.15)); }
-.lab-wiki-list .lab-wiki-page-item__name { font-weight: 600; color: var(--fg-0); }
-.lab-wiki-list .lab-wiki-page-item__summary { color: var(--fg-3); font-size: 0.78rem; white-space: nowrap; overflow: hidden; text-overflow: ellipsis; }
-.lab-wiki-editor {
-  display: flex;
-  flex-direction: column;
-  gap: 8px;
-  border: 1px solid var(--border);
-  border-radius: var(--radius);
-  background: var(--bg-card);
-  padding: 12px;
-}
-.lab-wiki-editor__head {
-  display: flex;
-  align-items: center;
-  gap: 8px;
-}
-.lab-wiki-editor__head .lab-input { flex: 1; font-family: var(--font-mono, monospace); font-size: 0.85rem; }
-.lab-wiki-editor__acts { display: flex; gap: 6px; flex-shrink: 0; }
-.lab-wiki-editor__content {
+.lab-wiki-search {
   width: 100%;
-  flex: 1;
   background: var(--bg-1);
   border: 1px solid var(--border);
   border-radius: var(--radius);
   color: var(--fg-0);
-  font-family: var(--font-mono, monospace);
   font-size: 0.84rem;
-  padding: 10px;
-  resize: vertical;
+  padding: 6px 10px;
   box-sizing: border-box;
+  outline: none;
 }
-.lab-wiki-health {
-  margin-top: 12px;
+.lab-wiki-search:focus { border-color: var(--accent, #6366f1); }
+
+/* Folder tree */
+.lab-wiki-tree {
+  flex: 1;
+  overflow-y: auto;
+  overflow-x: hidden;
+}
+.lab-wiki-folder__head {
+  display: flex;
+  align-items: center;
+  gap: 6px;
+  padding: 6px 10px 6px 8px;
+  cursor: pointer;
+  font-size: 0.8rem;
+  font-weight: 600;
+  color: var(--fg-2);
+  text-transform: uppercase;
+  letter-spacing: 0.04em;
+  user-select: none;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-1);
+}
+.lab-wiki-folder__head:hover { color: var(--fg-0); }
+.lab-wiki-folder__icon { font-size: 0.7rem; }
+.lab-wiki-folder__name { flex: 1; }
+.lab-wiki-folder.collapsed .lab-wiki-folder__pages { display: none; }
+
+.lab-wiki-item {
+  display: flex;
+  align-items: center;
+  gap: 7px;
+  padding: 7px 12px 7px 24px;
+  cursor: pointer;
+  font-size: 0.84rem;
+  color: var(--fg-1);
+  border-bottom: 1px solid var(--border);
+  transition: background 0.1s;
+  white-space: nowrap;
+  overflow: hidden;
+}
+.lab-wiki-item:hover { background: var(--hover); color: var(--fg-0); }
+.lab-wiki-item.active { background: rgba(99,102,241,0.15); color: var(--fg-0); font-weight: 600; }
+.lab-wiki-item__icon { font-size: 0.78rem; flex-shrink: 0; }
+.lab-wiki-item__name { overflow: hidden; text-overflow: ellipsis; }
+
+/* Root items (no folder) */
+.lab-wiki-tree > .lab-wiki-item { padding-left: 12px; }
+
+/* Nav footer */
+.lab-wiki-nav__footer {
+  padding: 8px;
+  border-top: 1px solid var(--border);
+  display: flex;
+  gap: 4px;
+  flex-wrap: wrap;
+  flex-shrink: 0;
+}
+
+/* No-result panel */
+.lab-wiki-noresult {
+  padding: 16px 12px;
+  display: flex;
+  flex-direction: column;
+  gap: 10px;
+  font-size: 0.84rem;
+  color: var(--fg-2);
+}
+
+/* Main editor area */
+.lab-wiki-main {
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+
+/* Toolbar */
+.lab-wiki-toolbar {
+  display: flex;
+  align-items: center;
+  gap: 8px;
+  padding: 8px 12px;
+  border-bottom: 1px solid var(--border);
+  background: var(--bg-card);
+  flex-shrink: 0;
+  flex-wrap: wrap;
+}
+.lab-wiki-name-input {
+  flex: 1;
+  min-width: 120px;
+  background: transparent;
+  border: 1px solid transparent;
+  border-radius: var(--radius);
+  color: var(--fg-0);
+  font-size: 0.9rem;
+  font-weight: 600;
+  font-family: var(--font-mono, monospace);
+  padding: 4px 8px;
+  outline: none;
+}
+.lab-wiki-name-input:hover { border-color: var(--border); }
+.lab-wiki-name-input:focus { border-color: var(--accent, #6366f1); background: var(--bg-1); }
+.lab-wiki-toolbar__tabs {
+  display: flex;
   border: 1px solid var(--border);
   border-radius: var(--radius);
-  background: var(--bg-card);
-  padding: 12px;
-  font-size: 0.84rem;
+  overflow: hidden;
 }
-.lab-wiki-health h4 { margin: 0 0 8px; color: var(--fg-0); }
-.lab-wiki-health .lab-wiki-health__row {
+.lab-wiki-tab {
+  background: transparent;
+  border: none;
+  color: var(--fg-2);
+  padding: 4px 14px;
+  font-size: 0.82rem;
+  cursor: pointer;
+  transition: background 0.1s, color 0.1s;
+}
+.lab-wiki-tab:hover { background: var(--hover); color: var(--fg-0); }
+.lab-wiki-tab.active { background: var(--accent, #6366f1); color: #fff; }
+.lab-wiki-save-state { font-size: 0.78rem; color: var(--accent, #f59e0b); min-width: 72px; }
+.lab-wiki-toolbar__acts { display: flex; gap: 6px; margin-left: auto; }
+.lab-wiki-toolbar kbd {
+  font-size: 0.68rem;
+  background: rgba(255,255,255,0.1);
+  border-radius: 3px;
+  padding: 1px 4px;
+  font-family: var(--font-mono, monospace);
+}
+
+/* Panes */
+.lab-wiki-pane {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  overflow: hidden;
+  min-height: 0;
+}
+.lab-wiki-editor__content {
+  flex: 1;
+  width: 100%;
+  background: var(--bg-0, var(--bg-1));
+  border: none;
+  color: var(--fg-0);
+  font-family: var(--font-mono, monospace);
+  font-size: 0.85rem;
+  line-height: 1.6;
+  padding: 16px 20px;
+  resize: none;
+  box-sizing: border-box;
+  outline: none;
+}
+.lab-wiki-preview {
+  flex: 1;
+  overflow-y: auto;
+  padding: 20px 28px;
+  font-size: 0.9rem;
+  line-height: 1.7;
+  color: var(--fg-0);
+}
+.lab-wiki-preview h1, .lab-wiki-preview h2, .lab-wiki-preview h3 { color: var(--fg-0); margin-top: 1.2em; }
+.lab-wiki-preview code { background: var(--bg-card); border-radius: 3px; padding: 1px 5px; font-size: 0.84em; }
+.lab-wiki-preview pre { background: var(--bg-card); border-radius: var(--radius); padding: 12px; overflow-x: auto; }
+.lab-wiki-preview a { color: var(--accent, #6366f1); }
+.lab-wiki-preview blockquote { border-left: 3px solid var(--border); padding-left: 12px; color: var(--fg-2); }
+.lab-wiki-preview table { border-collapse: collapse; width: 100%; }
+.lab-wiki-preview td, .lab-wiki-preview th { border: 1px solid var(--border); padding: 6px 10px; }
+
+/* Empty state */
+.lab-wiki-empty {
+  flex: 1;
+  display: flex;
+  flex-direction: column;
+  align-items: center;
+  justify-content: center;
+  gap: 12px;
+  color: var(--fg-3);
+}
+.lab-wiki-empty__icon { font-size: 3rem; }
+.lab-wiki-empty h3 { font-size: 1.1rem; color: var(--fg-1); margin: 0; }
+.lab-wiki-empty p { margin: 0; font-size: 0.86rem; }
+
+/* Health panel */
+.lab-wiki-health {
+  border-top: 1px solid var(--border);
+  background: var(--bg-card);
+  padding: 12px 16px;
+  font-size: 0.83rem;
+  flex-shrink: 0;
+}
+.lab-wiki-health h4 { margin: 0 0 8px; color: var(--fg-0); font-size: 0.9rem; }
+.lab-wiki-health__row {
   display: flex; gap: 8px; align-items: center;
   padding: 4px 0;
   border-bottom: 1px solid var(--border);
   color: var(--fg-2);
 }
-.lab-wiki-health .lab-wiki-health__row:last-child { border-bottom: none; }
-.lab-wiki-health .lab-tag--warn { background: rgba(234,179,8,0.2); color: #ca8a04; }
-.lab-wiki-health .lab-tag--ok { background: rgba(34,197,94,0.2); color: #16a34a; }
+.lab-wiki-health__row:last-child { border-bottom: none; }
+.lab-wiki-health__row span:first-child { flex: 1; }
+.lab-wiki-health__detail { font-size: 0.76rem; color: var(--fg-3); }
+.lab-tag--warn { background: rgba(234,179,8,0.2); color: #ca8a04; }
+.lab-tag--ok { background: rgba(34,197,94,0.2); color: #16a34a; }
