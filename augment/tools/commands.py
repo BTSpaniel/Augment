@@ -6,6 +6,7 @@ import subprocess
 from pathlib import Path
 from typing import Any, Dict
 
+from augment.tools.compat import try_compat_command
 from augment.tools.registry import ToolRegistry
 
 _MAX_OUTPUT_CHARS = 30_000
@@ -36,6 +37,12 @@ def run_command(command: str, cwd: str = ".", timeout: int = _DEFAULT_TIMEOUT, _
             "Use the 'search_code' tool for text/regex search (it has a built-in Python fallback) "
             "or 'search_files' to find files by name. Do not retry with run_command."
         )
+    # Cross-platform compat interception: mkdir/touch/rm/ls/cat/echo>, etc. are
+    # routed to internal handlers that work on any OS, so POSIX-isms never hit
+    # (and break on) the Windows shell. None => not a compat verb, fall through.
+    compat = try_compat_command(command, cwd, _context)
+    if compat is not None:
+        return compat
     try:
         timeout = min(max(1, int(timeout or _DEFAULT_TIMEOUT)), 300)
     except Exception:

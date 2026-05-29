@@ -55,6 +55,7 @@ DEFAULT_ZONE_MEMBERSHIP: Dict[Zone, List[str]] = {
         "agent_soul",
         "active_plan",
         "tool_policy",
+        "environment",
     ],
     Zone.DUMB_MIDDLE: [
         # Bulk reference material — the agent uses these as a lookup

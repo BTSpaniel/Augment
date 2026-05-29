@@ -6,6 +6,7 @@ from typing import Callable, Optional
 
 from augment.config import AppConfig
 from augment.context.budget import ContextBudgetAllocator
+from augment.context.environment import environment_prompt_block
 from augment.context.memory import ChatMessage, MemoryStore
 from augment.context.tokens import (
     count_tokens,
@@ -127,6 +128,7 @@ class ContextBuilder:
             "user_model":       user_model,
             "mind_state":       mind_context,
             "runtime":          self._runtime(),
+            "environment":      self._environment(),
             "workspace":        self._workspace(),
             "scratchboard":     scratchboard,
             "session_mailbox":  mailbox_context,
@@ -345,6 +347,12 @@ BIAS TO ACTION — do not stall on clarification:
 
     def _runtime(self) -> str:
         return f"[RUNTIME]\nUnix time: {time.time():.0f}"
+
+    def _environment(self) -> str:
+        """Host OS / shell / available-tools block so the model emits
+        commands compatible with this machine. Cached host probe.
+        """
+        return environment_prompt_block()
 
     def _workspace(self) -> str:
         if self._config.full_access:

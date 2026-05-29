@@ -3,6 +3,7 @@ from __future__ import annotations
 from augment.tools.browser import register_browser_tools
 from augment.tools.codex_tools import register_codex_tools
 from augment.tools.commands import register_command_tools
+from augment.tools.compat import register_compat_tools
 from augment.tools.files import register_file_tools
 from augment.tools.git import register_git_tools
 from augment.tools.introspection import register_introspection_tools
@@ -23,6 +24,7 @@ def build_tool_registry() -> ToolRegistry:
     # Ported FAIL tool packs
     register_memory_tools(registry)
     register_command_tools(registry)
+    register_compat_tools(registry)
     register_sandbox_tools(registry)
     register_git_tools(registry)
     register_wiki_tools(registry)
