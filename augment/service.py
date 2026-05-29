@@ -319,6 +319,7 @@ class AugmentApp:
                     "scratch_root": str(self.config.scratch_root),
                     "output_dir": str(self.sessions.meta(sid).get("output_dir") or ""),
                     "session_id": sid,
+                    "full_access": self.settings.get_flag("full_access") if self.settings.get_flag("full_access") is not None else self.config.full_access,
                     "sessions_store": self.sessions,
                     "data_dir": str(self.config.data_dir),
                     "memory": self.memory,

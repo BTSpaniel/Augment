@@ -59,6 +59,11 @@ class WikiWriteBody(BaseModel):
     source: str = "api"
 
 
+class FlagBody(BaseModel):
+    key: str
+    value: bool
+
+
 class FileSnippetBody(BaseModel):
     path: str = ""
     start: int = 1
@@ -259,6 +264,8 @@ async def agent(request: Request) -> dict[str, Any]:
     app = request.app.state.augment
     profile = app.agent.profile()
     provider = app.settings.public_snapshot()["provider"]
+    fa_runtime = app.settings.get_flag("full_access")
+    full_access = fa_runtime if fa_runtime is not None else app.config.full_access
     return {
         "agent": profile,
         "provider": {"name": provider.get("name"), "id": provider.get("id"), "model": provider.get("model")},
@@ -267,7 +274,25 @@ async def agent(request: Request) -> dict[str, Any]:
             for tool in app.tools.all()
         ],
         "context": app.context.stats(),
+        "full_access": full_access,
     }
+
+
+@router.get("/flags")
+async def get_flags(request: Request) -> dict[str, Any]:
+    app = request.app.state.augment
+    fa_runtime = app.settings.get_flag("full_access")
+    return {
+        "full_access": fa_runtime if fa_runtime is not None else app.config.full_access,
+        "flags": app.settings.flags(),
+    }
+
+
+@router.put("/flags")
+async def set_flag(body: FlagBody, request: Request) -> dict[str, Any]:
+    app = request.app.state.augment
+    app.settings.set_flag(body.key, body.value)
+    return {"key": body.key, "value": body.value}
 
 
 @router.put("/agent")

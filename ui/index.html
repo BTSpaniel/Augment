@@ -330,6 +330,26 @@
           <div class="lab-thinking__log" id="thinking-log"><div class="lab-empty">No reflections yet.</div></div>
         </section>
 
+        <!-- File Access -->
+        <section class="lab-section" id="file-access-card">
+          <header class="lab-section__header">
+            <div>
+              <h2>File Access</h2>
+              <p>Controls whether the agent can read and write files outside the configured workspace root.</p>
+            </div>
+          </header>
+          <div class="lab-flag-row">
+            <label class="lab-flag-toggle">
+              <input type="checkbox" id="full-access-toggle" />
+              <span class="lab-flag-toggle__track"></span>
+            </label>
+            <div class="lab-flag-info">
+              <strong id="full-access-label">Full Access: OFF</strong>
+              <p id="full-access-hint">Agent can only read/write files under the workspace root. Enable to allow any absolute path (e.g. <code>C:\cake</code>).</p>
+            </div>
+          </div>
+        </section>
+
         <section class="lab-section lab-agent">
           <header class="lab-agent__head">
             <div class="lab-agent__identity">

@@ -64,7 +64,29 @@ class SettingsStore:
     # ── Persistence ─────────────────────────────────────────────────
     def _seed_state(self) -> dict[str, Any]:
         # Start with zero providers; users add them via the UI / API.
-        return {"profiles": {}, "default_id": "", "removed_presets": [], "updated_at": 0.0}
+        return {"profiles": {}, "default_id": "", "removed_presets": [], "flags": {}, "updated_at": 0.0}
+
+    # ── Runtime flags (lightweight key/bool store) ───────────────────
+    def get_flag(self, key: str) -> bool | None:
+        """Return the stored flag value, or None if not explicitly set."""
+        state = self._read_state()
+        flags = state.get("flags")
+        if not isinstance(flags, dict) or key not in flags:
+            return None
+        return bool(flags[key])
+
+    def set_flag(self, key: str, value: bool) -> None:
+        """Persist a boolean flag to settings.json."""
+        state = self._read_state()
+        flags = dict(state.get("flags") or {})
+        flags[key] = bool(value)
+        state["flags"] = flags
+        self._write_state(state)
+
+    def flags(self) -> dict[str, bool]:
+        """Return all stored flags."""
+        stored = self._read_state().get("flags") or {}
+        return {k: bool(v) for k, v in stored.items() if isinstance(stored, dict)}
 
     def _read_state(self) -> dict[str, Any]:
         if not self._path.exists():

@@ -101,6 +101,7 @@ class AppConfig:
     data_dir: Path
     scratch_root: Path
     discover_sources: tuple[Path, ...] = ()
+    full_access: bool = False  # When True the agent may read/write any absolute path
 
 
 def load_config(path: str | Path | None = None) -> AppConfig:
@@ -120,6 +121,8 @@ def load_config(path: str | Path | None = None) -> AppConfig:
     data_dir = _resolve_path(os.getenv("AUGMENT_DATA_DIR") or raw.get("data_dir") or "data")
     scratch_root_raw = os.getenv("AUGMENT_SCRATCH_ROOT") or raw.get("scratch_root") or ""
     scratch_root = _resolve_path(scratch_root_raw) if scratch_root_raw else (workspace_root / "temp")
+    _fa_env = os.getenv("AUGMENT_FULL_ACCESS", "")
+    full_access = bool(raw.get("full_access")) if not _fa_env else _fa_env.lower() not in {"0", "false", "no", ""}
 
     discover_raw: list[str] = []
     raw_sources = raw.get("discover_sources")
@@ -169,6 +172,7 @@ def load_config(path: str | Path | None = None) -> AppConfig:
         data_dir=data_dir,
         scratch_root=scratch_root,
         discover_sources=discover_sources,
+        full_access=full_access,
     )
 
 

@@ -13,11 +13,17 @@ _MAX_LIST_ENTRIES = 200
 _STYLE_CHECK_EXTENSIONS = {".html", ".htm", ".css", ".js", ".mjs", ".cjs", ".py"}
 
 
-def resolve_under(root: Path, path: str) -> Path:
+def _full_access(_context: dict[str, Any] | None) -> bool:
+    """Return True when the agent is allowed to touch paths outside workspace_root."""
+    return bool((_context or {}).get("full_access"))
+
+
+def resolve_under(root: Path, path: str, *, full_access: bool = False) -> Path:
     base = root.expanduser().resolve()
     value = Path(str(path or ".")).expanduser()
     candidate = value.resolve() if value.is_absolute() else (base / value).resolve()
-    candidate.relative_to(base)
+    if not full_access:
+        candidate.relative_to(base)
     return candidate
 
 
@@ -186,7 +192,7 @@ def _coding_style_errors(path: Path, content: str) -> list[str]:
 
 def list_dir(path: str = ".", _context: dict[str, Any] | None = None) -> str:
     root = _workspace_root(_context)
-    target = resolve_under(root, path)
+    target = resolve_under(root, path, full_access=_full_access(_context))
     if not target.exists():
         return f"Error: directory not found: {path}"
     if not target.is_dir():

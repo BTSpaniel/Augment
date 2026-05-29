@@ -123,12 +123,14 @@ class SafetyMonitor:
             proposal.reasons.append("secret_path")
             return SafetyDecision("block", proposal, "Blocked: access to secret or credential path")
 
-        # Workspace-root guard (prevent escaping the workspace)
-        root_msg = self._check_workspace_root(proposal.target_paths, context)
-        if root_msg:
-            proposal.risk = "critical"
-            proposal.reasons.append(root_msg)
-            return SafetyDecision("block", proposal, root_msg)
+        # Workspace-root guard — skipped when full_access is enabled so the
+        # agent can work on any path the user explicitly names.
+        if not context.get("full_access"):
+            root_msg = self._check_workspace_root(proposal.target_paths, context)
+            if root_msg:
+                proposal.risk = "critical"
+                proposal.reasons.append(root_msg)
+                return SafetyDecision("block", proposal, root_msg)
 
         # run_command special handling
         if tool_name == "run_command":

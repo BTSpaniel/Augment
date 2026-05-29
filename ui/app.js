@@ -116,6 +116,9 @@ const els = {
   permissionBtn: qs('#composer-permission-btn'),
   permissionMenu: qs('#composer-permission-menu'),
   composerStopBtn: qs('#composer-stop-btn'),
+  fullAccessToggle: qs('#full-access-toggle'),
+  fullAccessLabel: qs('#full-access-label'),
+  fullAccessHint: qs('#full-access-hint'),
   thinkingStartBtn: qs('#thinking-start-btn'),
   thinkingStopBtn: qs('#thinking-stop-btn'),
   thinkingRefreshBtn: qs('#thinking-refresh-btn'),
@@ -247,6 +250,7 @@ function bindEvents() {
   els.input?.addEventListener('dragover', onComposerDragOver);
   els.input?.addEventListener('drop', onComposerDrop);
   els.composerStopBtn?.addEventListener('click', stopActiveChat);
+  els.fullAccessToggle?.addEventListener('change', onFullAccessToggle);
   els.thinkingStartBtn?.addEventListener('click', startThinking);
   els.thinkingStopBtn?.addEventListener('click', stopThinking);
   els.thinkingRefreshBtn?.addEventListener('click', loadThinking);
@@ -3583,6 +3587,39 @@ async function cancelCodexLogin() {
   await loadCodex();
 }
 
+/* ── Full-access flag ───────────────────────────────────────────── */
+async function loadFullAccess() {
+  if (!els.fullAccessToggle) return;
+  try {
+    const data = await request('/api/flags');
+    _renderFullAccess(Boolean(data.full_access));
+  } catch (_) { /* keep prior render */ }
+}
+
+function _renderFullAccess(enabled) {
+  if (els.fullAccessToggle) els.fullAccessToggle.checked = enabled;
+  if (els.fullAccessLabel) els.fullAccessLabel.textContent = `Full Access: ${enabled ? 'ON' : 'OFF'}`;
+  if (els.fullAccessHint) els.fullAccessHint.innerHTML = enabled
+    ? 'Agent can read and write <strong>any absolute path</strong> on the filesystem. Secret paths (.env, SSH keys, etc.) are still blocked.'
+    : 'Agent can only read/write files under the workspace root. Enable to allow any absolute path (e.g. <code>C:\\cake</code>).';
+}
+
+async function onFullAccessToggle() {
+  const enabled = Boolean(els.fullAccessToggle?.checked);
+  try {
+    await request('/api/flags', {
+      method: 'PUT',
+      headers: { 'Content-Type': 'application/json' },
+      body: JSON.stringify({ key: 'full_access', value: enabled }),
+    });
+    _renderFullAccess(enabled);
+    flash(`Full access ${enabled ? 'enabled' : 'disabled'}`);
+  } catch (error) {
+    flash(`Toggle failed: ${error.message}`);
+    if (els.fullAccessToggle) els.fullAccessToggle.checked = !enabled;
+  }
+}
+
 /* ── Background thinking ─────────────────────────────────────────── */
 async function loadThinking() {
   if (!els.thinkingStatus) return;
@@ -3681,6 +3718,7 @@ function openPage(page) {
     loadAgentSoul();
     loadCodex();
     loadThinking();
+    loadFullAccess();
   }
 }
 

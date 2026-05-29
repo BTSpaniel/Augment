@@ -567,6 +567,55 @@ code { font-family: ui-monospace, SFMono-Regular, Consolas, monospace; font-size
 }
 .lab-thinking__entry p { margin: 0; font-size: 0.84rem; color: var(--fg-1); line-height: 1.4; }
 
+/* File-access flag row */
+.lab-flag-row {
+  display: flex;
+  align-items: flex-start;
+  gap: 14px;
+}
+.lab-flag-info { flex: 1; }
+.lab-flag-info strong { font-size: 0.88rem; color: var(--fg-0); }
+.lab-flag-info p { margin: 4px 0 0; font-size: 0.78rem; color: var(--fg-3); line-height: 1.4; }
+
+/* Toggle switch */
+.lab-flag-toggle {
+  position: relative;
+  display: inline-flex;
+  align-items: center;
+  cursor: pointer;
+  flex-shrink: 0;
+  margin-top: 2px;
+}
+.lab-flag-toggle input { position: absolute; opacity: 0; width: 0; height: 0; }
+.lab-flag-toggle__track {
+  width: 40px;
+  height: 22px;
+  background: var(--bg-0);
+  border: 1px solid var(--border);
+  border-radius: 11px;
+  transition: background 0.18s, border-color 0.18s;
+  position: relative;
+}
+.lab-flag-toggle__track::after {
+  content: '';
+  position: absolute;
+  top: 3px;
+  left: 3px;
+  width: 14px;
+  height: 14px;
+  border-radius: 50%;
+  background: var(--fg-3);
+  transition: transform 0.18s, background 0.18s;
+}
+.lab-flag-toggle input:checked + .lab-flag-toggle__track {
+  background: var(--accent, #6366f1);
+  border-color: var(--accent, #6366f1);
+}
+.lab-flag-toggle input:checked + .lab-flag-toggle__track::after {
+  transform: translateX(18px);
+  background: #fff;
+}
+
 /* Agent Profile section (tabbed: Profile / Soul) */
 .lab-agent { gap: 14px; }
 .lab-agent__head {

@@ -334,6 +334,17 @@ succeeded. One loop, no mesh, no dashboards."""
         return f"[RUNTIME]\nUnix time: {time.time():.0f}"
 
     def _workspace(self) -> str:
+        if self._config.full_access:
+            return (
+                f"[WORKSPACE]\n"
+                f"Root: {self._config.workspace_root}\n"
+                f"Scratch (default write dir): {self._config.scratch_root}\n"
+                "Full-access mode: you may read, list, and write ANY absolute path "
+                "on the filesystem — not limited to Root. Use absolute paths (e.g. "
+                "C:/cake/index.html) whenever the user names a directory outside Root. "
+                "New `write_file` calls with relative paths still land under "
+                "`<scratch>/<session_id>/` unless `set_output_dir(path)` has been called."
+            )
         return (
             f"[WORKSPACE]\n"
             f"Root: {self._config.workspace_root}\n"
