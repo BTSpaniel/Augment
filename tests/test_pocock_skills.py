@@ -47,6 +47,25 @@ def test_grill_trigger_phrases_activate():
         assert "adaptive_grill_me" in ids, phrase
 
 
+def test_grill_build_request_deactivates_in_same_message():
+    # An explicit grill activation combined with a build request in the same
+    # message must NOT activate grill — the build override wins.
+    for phrase in [
+        "grill me but just build it",
+        "stop grilling, build it",
+        "enough questions, make it",
+        "no more questions write the code",
+    ]:
+        skills = pocock_skills_for(phrase)
+        ids = {s.id for s in skills}
+        assert "adaptive_grill_me" not in ids, phrase
+
+
+def test_grill_prompt_carries_build_request_override():
+    assert "Build-Request Override" in GRILL_PROMPT
+    assert "STOP asking questions" in GRILL_PROMPT
+
+
 def test_handoff_trigger_phrases_activate():
     for phrase in [
         "write a handoff document",

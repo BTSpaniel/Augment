@@ -113,7 +113,12 @@ GRILL_TRIGGER = re.compile(
     r"ask me (?:hard )?questions about|poke holes in|find the gaps in (?:my |the )?plan)\b",
     re.IGNORECASE,
 )
-GRILL_OFF = re.compile(r"\b(stop grilling|enough questions|i'm done)\b", re.IGNORECASE)
+GRILL_OFF = re.compile(
+    r"\b(stop grilling|enough questions?|no more questions?|stop asking|"
+    r"i'?m done|just (?:build|make|do|write|create) it|"
+    r"build it|make it|implement it|write the code|create the)\b",
+    re.IGNORECASE,
+)
 
 GRILL_PROMPT = """\
 GRILL-ME MODE — interview-style design review.
@@ -134,8 +139,18 @@ tree, resolving dependencies between decisions one-by-one.
 
 ## Persistence
 
-ACTIVE until the user says "stop grilling", "enough", or the tree is fully
-resolved. Do not silently revert to flat answers mid-interview.
+ACTIVE until the user says "stop grilling", "enough", the tree is fully
+resolved, OR the user issues a concrete build request. Do not silently revert
+to flat answers mid-interview without one of those triggers.
+
+## Build-Request Override — EXIT grilling and build
+
+The interview exists to refine a plan, not to block work. The MOMENT the user
+asks you to build, make, implement, write, create, or otherwise execute
+something concrete, STOP asking questions immediately and DELIVER it with
+sensible defaults. A build/execute request ENDS the interview — treat it as
+"stop grilling". Never answer a build request with more questions, and never
+repeat a question the user has already moved past.
 
 ## Auto-Clarity Exception
 
@@ -161,6 +176,7 @@ GRILL_PACK = {
     "when_not_to_use": [
         "Do not activate for simple factual questions or tiny edits.",
         "Do not activate when the user has already committed to a plan and asks for execution.",
+        "Exit immediately when the user issues a concrete build/implement/create request.",
     ],
     "inputs": ["plan_or_design", "constraints", "available_codebase"],
     "outputs": [
