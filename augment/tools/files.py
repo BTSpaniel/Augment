@@ -348,12 +348,21 @@ def set_output_dir(path: str, _context: dict[str, Any] | None = None) -> str:
     clean = str(path or "").strip()
     if not clean:
         sessions.set_meta(sid, output_dir="")
+        # Update the live turn context so the change takes effect immediately,
+        # not just on the next turn (tool_context is built once per turn).
+        if isinstance(_context, dict):
+            _context["output_dir"] = ""
         return "Cleared output_dir override; new files will go to the default scratch directory."
     resolved = Path(clean).expanduser().resolve()
     if not _WRITE_PATH_GUARD.is_safe(str(resolved)):
         return f"Error: refused to set sensitive path as output_dir: {resolved}"
     resolved.mkdir(parents=True, exist_ok=True)
     sessions.set_meta(sid, output_dir=str(resolved))
+    # Update the live turn context so subsequent write_file calls in THIS turn
+    # honor the override. Without this they fall back to scratch because the
+    # per-turn tool_context snapshot still holds the old (empty) output_dir.
+    if isinstance(_context, dict):
+        _context["output_dir"] = str(resolved)
     return f"Output directory set to {resolved}. Subsequent write_file calls (with relative paths) will land here."
 
 
