@@ -72,3 +72,48 @@ def test_stuck_loop_not_detected_when_assistant_varies():
         {"role": "assistant", "content": "Upgraded the fragment shader with a glowing frosting gradient."},
     ]
     assert detect_stuck_loop(history) is None
+
+
+# ── hardening: malformed / mixed input ──────────────────────────────
+
+
+class _MsgObj:
+    """Message-like object exposing .role / .content (not a dict)."""
+
+    def __init__(self, role: str, content: str) -> None:
+        self.role = role
+        self.content = content
+
+
+def test_handles_none_and_empty_without_crashing():
+    assert ContextRotDetector().check([]).health == "healthy"
+    assert ContextRotDetector().check(None).health == "healthy"
+    assert ContextCompressor().compress_history([]) == []
+    assert ContextCompressor().compress_history(None) == []
+    assert detect_stuck_loop(None) is None
+
+
+def test_skips_non_dict_garbage_items_without_crashing():
+    history = [None, "stray string", 42, {"role": "user", "content": "hi"}]
+    # Should not raise on any path.
+    assert ContextRotDetector().check(history) is not None
+    assert ContextCompressor().compress_history(history) is not None
+    assert detect_stuck_loop(history) is None
+
+
+def test_detects_loop_on_message_like_objects():
+    history = [_MsgObj("assistant", "I can help. What platform and objects?") for _ in range(5)]
+    assert detect_stuck_loop(history) == STUCK_LOOP_DIRECTIVE
+
+
+def test_cluster_detected_even_when_last_turn_differs():
+    # Three identical deflections, then a slightly different final turn — the
+    # cluster (not anchor-only) logic must still fire.
+    deflection = "I can help you build that. Could you clarify the scope first?"
+    history = [
+        {"role": "assistant", "content": deflection},
+        {"role": "assistant", "content": deflection},
+        {"role": "assistant", "content": deflection},
+        {"role": "assistant", "content": "Sure, starting now with a brand new plan entirely."},
+    ]
+    assert detect_stuck_loop(history) == STUCK_LOOP_DIRECTIVE

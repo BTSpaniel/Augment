@@ -57,6 +57,7 @@ class ContextRotConfig:
     redundancy_overlap: float = 0.55
     stuck_overlap: float = 0.8
     stuck_min_repeats: int = 2
+    stuck_window: int = 4
 
 
 # ── helpers ─────────────────────────────────────────────────────────
@@ -83,6 +84,19 @@ def _word_overlap(left: str, right: str) -> float:
     return len(left_words & right_words) / max(len(left_words | right_words), 1)
 
 
+def _role_content(item: Any) -> tuple[str, Any]:
+    """Safely pull ``(role, content)`` from a history entry.
+
+    Accepts the loop's plain ``{"role", "content"}`` dicts and objects that
+    expose ``.role`` / ``.content`` attributes (e.g. a provider ``Message``).
+    Anything else yields ``("", None)`` so a malformed entry is skipped
+    rather than raising and taking down the whole turn assembly.
+    """
+    if isinstance(item, dict):
+        return str(item.get("role") or ""), item.get("content")
+    return str(getattr(item, "role", "") or ""), getattr(item, "content", None)
+
+
 # ── 2. Detector ─────────────────────────────────────────────────────
 
 
@@ -99,6 +113,8 @@ class ContextRotDetector:
         turns are ignored. Health is ``critical`` / ``degrading`` /
         ``healthy`` based on the redundancy and staleness scores.
         """
+        if not messages:
+            return ContextRotReport("healthy", 0.0, 0.0, [])
         redundancy = self._redundancy(messages)
         staleness = self._staleness(messages)
         repeated = self._repeated_indices(messages)
@@ -112,11 +128,14 @@ class ContextRotDetector:
 
     def _redundancy(self, messages: List[Dict[str, Any]]) -> float:
         """Fraction of near-neighbor turn pairs that overlap heavily."""
-        fingerprints = [
-            _normalize(item.get("content"))[:240]
-            for item in messages
-            if str(item.get("role") or "") != "system" and _normalize(item.get("content"))
-        ]
+        fingerprints: List[str] = []
+        for item in messages:
+            role, content = _role_content(item)
+            if role == "system":
+                continue
+            norm = _normalize(content)
+            if norm:
+                fingerprints.append(norm[:240])
         if len(fingerprints) < 4:
             return 0.0
         overlaps = 0
@@ -133,9 +152,10 @@ class ContextRotDetector:
         stale = 0.0
         total = 0
         for item in messages:
-            if str(item.get("role") or "") == "system":
+            role, raw = _role_content(item)
+            if role == "system":
                 continue
-            content = str(item.get("content") or "")
+            content = str(raw or "")
             if not content:
                 continue
             total += 1
@@ -151,7 +171,8 @@ class ContextRotDetector:
         repeated: List[int] = []
         seen: Dict[str, int] = {}
         for index, item in enumerate(messages):
-            content = _normalize(item.get("content"))[:180]
+            _, raw = _role_content(item)
+            content = _normalize(raw)[:180]
             if not content:
                 continue
             if content in seen and index < len(messages) - 4:
@@ -198,15 +219,18 @@ class ContextCompressor:
             if index >= keep_from:
                 result.append(item)
                 continue
-            content = str(item.get("content") or "")
-            norm = _normalize(content)[:180]
+            _, raw = _role_content(item)
+            content = str(raw or "")
+            norm = _normalize(raw)[:180]
             # Drop an older turn that is an exact normalized duplicate of one
             # we already kept — this is the poisoning signal.
             if norm and norm in seen_recent:
                 continue
             if norm:
                 seen_recent[norm] = index
-            if len(content) > self._config.long_turn_chars:
+            # Only dict items can be safely rebuilt with a compacted body;
+            # other shapes are passed through untouched.
+            if isinstance(item, dict) and len(content) > self._config.long_turn_chars:
                 item = {**item, "content": self._compact(content)}
             result.append(item)
         return result
@@ -241,26 +265,36 @@ def detect_stuck_loop(
 ) -> Optional[str]:
     """Return :data:`STUCK_LOOP_DIRECTIVE` when the agent is looping.
 
-    Looks at the most recent assistant turns. If at least
-    ``stuck_min_repeats`` of them are near-identical (word overlap above
-    ``stuck_overlap``, or exact normalized duplicates), the agent is echoing
-    itself and the caller should inject the directive to force action.
-    Returns ``None`` otherwise.
+    Scans the most recent ``stuck_window`` assistant turns and finds the
+    largest cluster of near-identical ones (exact normalized duplicates, or
+    word overlap at/above ``stuck_overlap``). If that cluster is at least
+    ``stuck_min_repeats + 1`` turns, the agent is echoing itself and the
+    caller should inject the directive to force action. Using a cluster (not
+    just comparing against the last turn) catches a loop even when the most
+    recent turn differs slightly. Returns ``None`` otherwise.
     """
     cfg = config or ContextRotConfig()
-    assistant = [
-        _normalize(item.get("content"))
-        for item in messages
-        if str(item.get("role") or "") == "assistant" and _normalize(item.get("content"))
-    ]
-    recent = assistant[-4:]
+    assistant: List[str] = []
+    for item in (messages or []):
+        role, content = _role_content(item)
+        if role != "assistant":
+            continue
+        norm = _normalize(content)
+        if norm:
+            assistant.append(norm)
+    window = max(cfg.stuck_window, cfg.stuck_min_repeats + 1)
+    recent = assistant[-window:]
     if len(recent) < cfg.stuck_min_repeats + 1:
         return None
-    anchor = recent[-1]
-    matches = 0
-    for prior in recent[:-1]:
-        if prior == anchor or _word_overlap(prior, anchor) >= cfg.stuck_overlap:
-            matches += 1
-    if matches >= cfg.stuck_min_repeats:
+    largest = 1
+    for i, anchor in enumerate(recent):
+        cluster = 1
+        for j, other in enumerate(recent):
+            if i == j:
+                continue
+            if other == anchor or _word_overlap(anchor, other) >= cfg.stuck_overlap:
+                cluster += 1
+        largest = max(largest, cluster)
+    if largest >= cfg.stuck_min_repeats + 1:
         return STUCK_LOOP_DIRECTIVE
     return None
