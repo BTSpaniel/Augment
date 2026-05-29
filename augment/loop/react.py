@@ -12,6 +12,7 @@ from augment.builder.edit_receipts import (
     is_mutation_tool,
     prepare_edit_receipt,
 )
+from augment.context.context_rot import ContextCompressor, detect_stuck_loop
 from augment.loop.scratchpad import Scratchpad
 from augment.loop.tool_plan import execute_tool_plan, extract_tool_plans, format_plan_results, strip_tool_plan_blocks
 from augment.providers.base import AIProvider, LLMResponse, Message, ProviderError
@@ -58,11 +59,21 @@ class ReActLoop:
         system_text = self._system_text()
         if system_text:
             messages.append(Message("system", system_text))
-        for item in (history_messages or [])[-30:]:
+        # Context-rot defense: dedup + compact the recent history window so a
+        # poisoned session (repeated request -> repeated deflection) can't
+        # pattern-match a weak model into looping. See augment.context.context_rot.
+        window = list(history_messages or [])[-30:]
+        window = ContextCompressor().compress_history(window)
+        for item in window:
             role = str(item.get("role") or "").strip()
             content = str(item.get("content") or "").strip()
             if role in {"user", "assistant"} and content:
                 messages.append(Message(role, content))
+        # Stuck-loop breaker: if the agent has been echoing itself, inject a
+        # forceful directive to stop deflecting and execute this turn.
+        loop_directive = detect_stuck_loop(window)
+        if loop_directive:
+            messages.append(Message("system", loop_directive))
         messages.append(Message("user", _build_user_content(message, images)))
 
         tool_calls = 0
