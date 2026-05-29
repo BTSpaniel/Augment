@@ -23,6 +23,39 @@ _TOOL_CALL_FENCE_RE = re.compile(r"```tool_call\s*\n(.*?)```", re.DOTALL | re.IG
 _EXPLORATION_TOOLS = {"list_dir", "read_file", "search_files", "search_code"}
 
 
+def _call_signature(name: str, args: Any) -> str:
+    """Stable identity for a tool call so identical retries can be detected."""
+    try:
+        return f"{name}:{json.dumps(args, sort_keys=True, default=str)}"
+    except Exception:
+        return f"{name}:{args}"
+
+
+def _repeat_directive(name: str, args: Any, count: int) -> str:
+    """Corrective message injected when the agent repeats an identical call.
+
+    Within a single rollout a weak model can re-issue the same failing tool
+    call every iteration (classic: ``mkdir -p`` on Windows). This nudges it to
+    change approach, and for the common mkdir case points it at write_file
+    (which already creates parent directories).
+    """
+    msg = (
+        f"[REPEAT GUARD] You have issued the identical `{name}` call {count} "
+        "times with the same arguments and it is not advancing the task. Do "
+        "NOT repeat it — change approach now."
+    )
+    command = ""
+    if isinstance(args, dict):
+        command = str(args.get("command") or args.get("cmd") or "")
+    if name == "run_command" and "mkdir" in command.lower():
+        msg += (
+            " You do NOT need mkdir: write_file creates all parent directories "
+            "automatically. Also this shell is Windows — `mkdir -p` is invalid "
+            "(no -p flag). Call write_file with the full target path now."
+        )
+    return msg
+
+
 @dataclass
 class ReActResult:
     content: str
@@ -79,6 +112,8 @@ class ReActLoop:
         tool_calls = 0
         exploration_streak = 0
         mutated_tools: list[str] = []
+        call_counts: dict[str, int] = {}
+        repeat_warned: set[str] = set()
         for iteration in range(1, self._max_iterations + 1):
             _gen_start = time.monotonic()
             try:
@@ -126,6 +161,12 @@ class ReActLoop:
                         if step_callback:
                             await step_callback({"kind": "observation", **item})
                     messages.append(Message("user", "[TOOL PLAN RESULTS]\n" + format_plan_results(results)))
+                    for item in results:
+                        sig = _call_signature(item["tool"], item.get("args"))
+                        call_counts[sig] = call_counts.get(sig, 0) + 1
+                        if call_counts[sig] >= 2 and sig not in repeat_warned:
+                            repeat_warned.add(sig)
+                            messages.append(Message("user", _repeat_directive(item["tool"], item.get("args"), call_counts[sig])))
                     exploration_streak = exploration_streak + 1 if all_explore else 0
                 if exploration_streak >= 4:
                     messages.append(Message("user", "You have inspected enough. Provide a concise final answer or make a necessary safe edit now."))
@@ -202,6 +243,11 @@ class ReActLoop:
                         tool_payload,
                         tool_call_id=str(call.get("id") or name),
                     ))
+                    sig = _call_signature(name, args)
+                    call_counts[sig] = call_counts.get(sig, 0) + 1
+                    if call_counts[sig] >= 2 and sig not in repeat_warned:
+                        repeat_warned.add(sig)
+                        messages.append(Message("user", _repeat_directive(name, args, call_counts[sig])))
                 exploration_streak = exploration_streak + 1 if only_explore else 0
                 continue
 

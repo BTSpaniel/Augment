@@ -74,7 +74,10 @@ def run_command(command: str, cwd: str = ".", timeout: int = _DEFAULT_TIMEOUT, _
 def register_command_tools(registry: ToolRegistry) -> None:
     registry.register_fn(
         "run_command",
-        "Run a shell command (cmd/bash) inside the workspace and return exit code, stdout, and stderr.",
+        "Run a shell command inside the workspace and return exit code, stdout, and stderr. "
+        "The shell is Windows (pwsh/cmd): Unix flags like `mkdir -p` are INVALID. "
+        "You almost never need mkdir at all — write_file creates all parent directories "
+        "automatically, so just call write_file with the full target path.",
         {"type": "object", "properties": {
             "command": {"type": "string", "description": "Shell command to execute"},
             "cwd": {"type": "string", "description": "Working directory relative to the workspace root"},
