@@ -81,20 +81,29 @@ def _target_files(tool_name: str, args: Dict[str, Any], context: Dict[str, Any])
     if tool_name == "apply_workspace_file":
         root = context.get("target_root") or context.get("workspace_root") or context.get("execution_root")
         path = str(args.get("target_path") or args.get("path") or "")
-        return [_resolve_under(root, path)] if root and path else []
+        resolved = _resolve_under(root, path) if root and path else None
+        return [resolved] if resolved else []
     if tool_name in {"write_file", "edit_file", "delete_file"}:
         root = context.get("workspace_root") or context.get("execution_root")
         path = str(args.get("path") or args.get("file_path") or args.get("target_file") or "")
-        return [_resolve_under(root, path)] if root and path else []
+        resolved = _resolve_under(root, path) if root and path else None
+        return [resolved] if resolved else []
     return []
 
 
-def _resolve_under(root_value: Any, value: str) -> Path:
+def _resolve_under(root_value: Any, value: str) -> Path | None:
+    """Resolve *value* under *root*. Returns ``None`` for paths outside the
+    workspace root (full-access edits) so the read-gate simply skips them —
+    the safety monitor and path guard already cover out-of-workspace safety.
+    """
     root = Path(str(root_value)).resolve()
     normalized = normalize_workspace_path(root, value)
     path = Path(normalized)
     resolved = (root / path).resolve() if not path.is_absolute() else path.resolve()
-    resolved.relative_to(root)
+    try:
+        resolved.relative_to(root)
+    except ValueError:
+        return None
     return resolved
 
 
