@@ -101,7 +101,7 @@ class AppConfig:
     data_dir: Path
     scratch_root: Path
     discover_sources: tuple[Path, ...] = ()
-    full_access: bool = False  # When True the agent may read/write any absolute path
+    full_access: bool = True  # When True the agent may read/write any absolute path
 
 
 def load_config(path: str | Path | None = None) -> AppConfig:
